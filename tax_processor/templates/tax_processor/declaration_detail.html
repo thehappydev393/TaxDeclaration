@@ -1,0 +1,45 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Declaration: {{ declaration.name }}</title>
+</head>
+<body>
+<h1>Declaration: {{ declaration.name }}</h1>
+
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li style="color: {% if message.tags == 'success' %}green{% elif message.tags == 'info' %}blue{% else %}red{% endif %};">{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<h2>Summary</h2>
+<ul>
+    <li>**Client Reference:** {{ declaration.client_reference }}</li>
+    <li>**Period:** {{ declaration.tax_period_start }} to {{ declaration.tax_period_end }}</li>
+    <li>**Total Statements Uploaded:** {{ total_statements }}</li>
+    <li>**Total Transactions:** {{ total_transactions }}</li>
+</ul>
+
+<h2>Rules Engine Status</h2>
+<p>Transactions currently unassigned (ready for analysis): <strong>{{ unassigned_transactions }}</strong></p>
+
+{% if unassigned_transactions > 0 %}
+<form action="{% url 'run_analysis' declaration_id=declaration.pk %}" method="post">
+    {% csrf_token %}
+    <button type="submit" style="background-color: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer;">
+        Execute Rules Engine Now
+    </button>
+    <p style="color: gray; margin-top: 10px;">(This will process all unassigned transactions.)</p>
+</form>
+{% else %}
+<p>All transactions have been assigned a tax point or reviewed.</p>
+{% endif %}
+
+<hr>
+<p>Back to <a href="{% url 'admin:tax_processor_declaration_changelist' %}">Declaration List</a></p>
+</body>
+</html>

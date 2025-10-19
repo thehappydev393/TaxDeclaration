@@ -1,0 +1,60 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+</head>
+<body>
+<h1>{{ title }}</h1>
+
+<form method="post">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div style="color: red;">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    {% for field in form %}
+    <div style="margin-bottom: 15px;">
+        <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+        {{ field }}
+        {% if field.help_text %}
+        <small style="display: block; color: gray;">{{ field.help_text }}</small>
+        {% endif %}
+        {% for error in field.errors %}
+        <p style="color: red;">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <button type="submit" style="background-color: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer;">
+        Save Rule
+    </button>
+    <a href="{% url 'rule_list' %}" style="margin-left: 15px;">Cancel</a>
+</form>
+
+<hr>
+<h3>JSON Rule Structure Example:</h3>
+<pre>
+[
+  {
+    "logic": "AND",
+    "checks": [
+      {"field": "description", "type": "CONTAINS_KEYWORD", "value": "Wire Transfer, Invoice #"},
+      {"field": "currency", "type": "EQUALS", "value": "USD"}
+    ]
+  },
+  {
+    "logic": "OR",
+    "checks": [
+      {"field": "sender_account", "type": "REGEX_MATCH", "value": "^(123|456)"},
+      {"field": "amount", "type": "GREATER_THAN", "value": "5000.00"}
+    ]
+  }
+]
+    </pre>
+</body>
+</html>

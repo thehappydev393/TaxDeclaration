@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Rule Management</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+<h1>Rule Management Dashboard</h1>
+
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li style="color: {% if message.tags == 'success' %}green{% else %}red{% endif %};">{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<p>
+    <a href="{% url 'rule_create' %}" style="background-color: #28a745; color: white; padding: 8px; text-decoration: none;">+ Create New Rule</a>
+</p>
+
+<h2>Active Rules (Order by Priority)</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Priority</th>
+        <th>Rule Name</th>
+        <th>Declaration Point</th>
+        <th>Active</th>
+        <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for rule in rules %}
+    <tr>
+        <td>{{ rule.priority }}</td>
+        <td>{{ rule.rule_name }}</td>
+        <td>{{ rule.declaration_point }}</td>
+        <td>{% if rule.is_active %}✅{% else %}❌{% endif %}</td>
+        <td>
+            <a href="{% url 'rule_update' rule.id %}">Edit</a> |
+            <form method="post" action="{% url 'rule_delete' rule.id %}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this rule?');">
+                {% csrf_token %}
+                <button type="submit" style="color: red; border: none; background: none; cursor: pointer; padding: 0;">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% empty %}
+    <tr>
+        <td colspan="5">No rules defined yet.</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<hr>
+<p>Go to <a href="{% url 'admin:index' %}">Admin Interface</a></p>
+</body>
+</html>

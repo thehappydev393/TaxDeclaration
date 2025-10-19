@@ -1,0 +1,34 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Statement Upload</title>
+</head>
+<body>
+<h1>Upload Bank Statement</h1>
+
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li style="color:
+                    {% if message.tags == 'success' %}green
+                    {% elif message.tags == 'info' %}blue
+                    {% else %}red
+                    {% endif %};">
+        {{ message }}
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Upload and Process</button>
+</form>
+
+<hr>
+<p>Go to <a href="{% url 'admin:index' %}">Admin Interface</a> to manage data.</p>
+</body>
+</html>
