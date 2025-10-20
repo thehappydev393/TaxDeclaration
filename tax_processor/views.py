@@ -142,10 +142,12 @@ def run_declaration_analysis(request, declaration_id):
 
         # Initialize and run the engine
         engine = RulesEngine(declaration_id=declaration.pk)
-        matched, unmatched = engine.run_analysis(assigned_user=assigned_user)
+        matched, new_unmatched, cleared_unmatched = engine.run_analysis(assigned_user=assigned_user)
 
         messages.success(request, f"Analysis Complete for '{declaration.name}'.")
-        messages.info(request, f"Matched {matched} transactions. Found {unmatched} new transactions requiring manual review.")
+        messages.info(request, f"Total Transactions Processed: {matched + new_unmatched + cleared_unmatched}")
+        messages.info(request, f"Matched {matched} new/re-evaluated transactions. Cleared {cleared_unmatched} existing review items.")
+        messages.info(request, f"Found {new_unmatched} new transactions requiring manual review.")
 
         # Redirect back to the detail page
         return redirect('declaration_detail', declaration_id=declaration.pk)

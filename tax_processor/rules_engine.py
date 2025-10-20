@@ -6,6 +6,7 @@ from .models import TaxRule, Transaction, UnmatchedTransaction, User
 from decimal import Decimal
 import re
 import json
+from django.utils import timezone
 
 class RulesEngine:
     """
@@ -121,21 +122,39 @@ class RulesEngine:
     @transaction.atomic
     def run_analysis(self, assigned_user: User):
         """
-        Main function to run the rules engine against all unassigned transactions
-        in the current declaration and queue unmatched items for review.
+        Main function to run the rules engine against:
+        1. New, unassigned transactions (NULL declaration_point).
+        2. Existing unmatched transactions (re-evaluation).
         """
 
-        # 1. Select unassigned transactions for this declaration
-        unassigned_transactions_qs = Transaction.objects.filter(
+        # 1. SELECT ALL TRANSACTIONS THAT NEED RE-EVALUATION
+
+        # a) Newly imported transactions (never assigned a point)
+        new_transactions_qs = Transaction.objects.filter(
             statement__declaration_id=self.declaration_id,
             declaration_point__isnull=True
         ).select_related('statement')
 
-        transactions_to_update = []
-        self.matched_count = 0
+        # b) Transactions currently in the review queue (needs re-evaluation against new rules)
+        # We target the transactions linked to PENDING or PROPOSED unmatched records.
+        re_evaluate_tx_qs = Transaction.objects.filter(
+            statement__declaration_id=self.declaration_id,
+            unmatched_record__status__in=['PENDING_REVIEW', 'NEW_RULE_PROPOSED']
+        ).select_related('statement', 'unmatched_record')
 
-        # 2. Apply Rules Sequentially (First Match Wins)
-        for tx in unassigned_transactions_qs:
+        # Combine the two QuerySets into a set of unique Transaction objects
+        # We need to get the actual objects since QuerySets cannot be easily merged if they aren't unionable.
+        transactions_for_analysis = list(set(list(new_transactions_qs) + list(re_evaluate_tx_qs)))
+
+        transactions_to_update = []
+        unmatched_records_to_clear = [] # Tracks UnmatchedTransaction objects that are now matched
+        self.matched_count = 0
+        self.unmatched_transactions = []
+
+
+        # 2. APPLY RULES AND TAG TRANSACTIONS
+
+        for tx in transactions_for_analysis:
             is_matched = False
             for rule in self.rules:
                 if self._check_rule(tx, rule):
@@ -145,31 +164,56 @@ class RulesEngine:
                     transactions_to_update.append(tx)
                     self.matched_count += 1
                     is_matched = True
-                    break # Stop checking rules (First Match Wins based on Priority)
 
-            if not is_matched:
+                    # If this transaction was sitting in the unmatched queue, mark it for clearance
+                    if hasattr(tx, 'unmatched_record'):
+                        unmatched_records_to_clear.append(tx.unmatched_record)
+
+                    break # First Match Wins
+
+            if not is_matched and not hasattr(tx, 'unmatched_record'):
+                # Only add to the unmatched list if it failed all rules AND isn't already queued
                 self.unmatched_transactions.append(tx)
 
-        # 3. Bulk update all successfully matched transactions
+
+        # 3. BULK DATABASE UPDATES (Matched Transactions)
+
         if transactions_to_update:
             Transaction.objects.bulk_update(
                 transactions_to_update,
                 ['matched_rule', 'declaration_point']
             )
 
-        # 4. Populate the Unmatched Queue
+
+        # 4. UPDATE UNMATCHED QUEUE STATUS (Clears resolved items)
+
+        # Clear items that were previously unmatched but are now matched by a new rule
+        cleared_unmatched_count = 0
+        if unmatched_records_to_clear:
+            for unmatched_record in unmatched_records_to_clear:
+                unmatched_record.status = 'RESOLVED'
+                unmatched_record.resolution_date = timezone.now()
+
+            UnmatchedTransaction.objects.bulk_update(
+                unmatched_records_to_clear,
+                ['status', 'resolution_date']
+            )
+            cleared_unmatched_count = len(unmatched_records_to_clear)
+
+
+        # 5. POPULATE NEW UNMATCHED QUEUE ITEMS (Items that failed and aren't already queued)
+
         unmatched_queue_objects = []
         for tx in self.unmatched_transactions:
-            # Only create an UnmatchedTransaction record if one doesn't already exist
-            if not UnmatchedTransaction.objects.filter(transaction=tx).exists():
-                unmatched_queue_objects.append(
-                    UnmatchedTransaction(
-                        transaction=tx,
-                        assigned_user=assigned_user, # The SUPERADMIN who triggered analysis
-                        status='PENDING_REVIEW'
-                    )
+            # We already filtered in step 2, so these transactions need a new UnmatchedTransaction record
+            unmatched_queue_objects.append(
+                UnmatchedTransaction(
+                    transaction=tx,
+                    assigned_user=assigned_user,
+                    status='PENDING_REVIEW'
                 )
+            )
 
         UnmatchedTransaction.objects.bulk_create(unmatched_queue_objects)
 
-        return self.matched_count, len(unmatched_queue_objects)
+        return self.matched_count, len(unmatched_queue_objects), cleared_unmatched_count
