@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.db import IntegrityError
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Sum
 from django.utils import timezone
 from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm
 from .services import import_statement_service
@@ -427,7 +427,7 @@ def finalize_rule(request, unmatched_id):
         'declaration_point': proposal_data.get('resolved_point_id'),
         'priority': 50, # Set a medium priority default
         'is_active': True,
-        'conditions_json': _clean_json_output(json_string),
+        'conditions_json': _clean_json_output(formatted_json),
     }
 
     if request.method == 'POST':
