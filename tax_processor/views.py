@@ -12,6 +12,7 @@ from .rules_engine import RulesEngine
 from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile
 from datetime import date
 import json
+from django.db import transaction as db_transaction
 
 # -----------------------------------------------------------
 # 1. PERMISSION HELPERS
@@ -165,6 +166,14 @@ def rule_list(request):
     }
     return render(request, 'tax_processor/rule_list.html', context)
 
+def _clean_json_output(json_string):
+    """Helper to remove unwanted quotes from a JSON string's beginning and end."""
+    # Check if the string starts and ends with a quote, and remove it.
+    if json_string.startswith('"') and json_string.endswith('"'):
+        # Strips the first and last characters (the outer quotes)
+        return json_string[1:-1]
+    return json_string
+
 @user_passes_test(is_superadmin)
 def rule_create_or_update(request, rule_id=None):
     """Handles creating a new rule or updating an existing one."""
@@ -189,11 +198,15 @@ def rule_create_or_update(request, rule_id=None):
     else:
         initial_data = {}
         if not rule:
-            initial_data['conditions_json'] = json.dumps([
+            # 1. Generate the clean JSON string
+            json_string = json.dumps([
                 {"logic": "AND", "checks": [
-                    {"field": "description", "type": "CONTAINS_KEYWORD", "value": "Example Keyword"}
+                    {"field": "description", "type": "CONTAINS_KEYWORD", "value": "Գործարքի Նկարագիր, Example Keyword"}
                 ]}
-            ], indent=2)
+            ], indent=2, ensure_ascii=False)
+
+            # 2. Assign the string to initial data (no trimming needed here, as it's not double-quoted yet)
+            initial_data['conditions_json'] = _clean_json_output(json_string)
 
         form = TaxRuleForm(instance=rule, initial=initial_data)
 
@@ -363,3 +376,85 @@ def tax_report(request, declaration_id):
         'total_sum_all': sum(item['total_amount'] for item in report_data),
     }
     return render(request, 'tax_processor/tax_report.html', context)
+
+@user_passes_test(is_superadmin)
+def review_proposals(request):
+    """
+    Superadmin view to list all transactions with a NEW_RULE_PROPOSED status.
+    """
+    proposals = UnmatchedTransaction.objects.filter(
+        status='NEW_RULE_PROPOSED'
+    ).select_related(
+        'transaction__statement__declaration',
+        'assigned_user'
+    ).order_by('-resolution_date')
+
+    context = {
+        'proposals': proposals,
+        'title': 'New Rule Proposals Awaiting Review'
+    }
+    return render(request, 'tax_processor/review_proposals.html', context)
+
+@user_passes_test(is_superadmin)
+def finalize_rule(request, unmatched_id):
+    """
+    Allows Superadmin to finalize a proposed rule by creating a TaxRule instance.
+    """
+    unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
+
+    if unmatched_item.status != 'NEW_RULE_PROPOSED':
+        messages.error(request, "This item is not a pending rule proposal.")
+        return redirect('review_proposals')
+
+    proposal_data = unmatched_item.rule_proposal_json
+
+    # 1. Start with the boilerplate description provided by the user's notes
+    sample_desc = proposal_data.get('sample_description', 'No description provided').replace('"', '\\"')
+
+    # 1. Build the structured rule logic dynamically
+    structured_conditions = [
+        {"logic": "AND", "checks": [
+            {"field": "description", "type": "CONTAINS_KEYWORD", "value": f"{sample_desc}"}
+        ]}
+    ]
+
+    # 3. Format the JSON string for the Textarea widget (using indent=2 and avoiding escapes)
+    formatted_json = json.dumps(structured_conditions, indent=2, ensure_ascii=False)
+
+    # Pre-populate the TaxRuleForm with data from the user's resolution
+    initial_data = {
+        'rule_name': f"AUTO_RULE: {unmatched_item.pk} - {proposal_data.get('resolved_point_name', 'Unnamed')}",
+        'declaration_point': proposal_data.get('resolved_point_id'),
+        'priority': 50, # Set a medium priority default
+        'is_active': True,
+        'conditions_json': _clean_json_output(json_string),
+    }
+
+    if request.method == 'POST':
+        # Use the TaxRuleForm to validate and save the new rule
+        form = TaxRuleForm(request.POST, initial=initial_data)
+        if form.is_valid():
+            with db_transaction.atomic():
+                # 1. Create the new permanent TaxRule
+                new_rule = form.save(commit=False)
+                new_rule.created_by = request.user
+                new_rule.save()
+
+                # 2. Update the UnmatchedTransaction status to indicate completion
+                unmatched_item.status = 'RESOLVED'
+                unmatched_item.save()
+
+            messages.success(request, f"New Rule '{new_rule.rule_name}' created and proposal cleared.")
+            return redirect('review_proposals')
+
+    else:
+        # Pass initial data to the form
+        form = TaxRuleForm(initial=initial_data)
+
+    context = {
+        'form': form,
+        'unmatched_item': unmatched_item,
+        'title': f"Finalize Rule Proposal #{unmatched_id}",
+        'proposal_notes': proposal_data.get('notes')
+    }
+    return render(request, 'tax_processor/finalize_rule.html', context)

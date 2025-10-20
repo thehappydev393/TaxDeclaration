@@ -1,0 +1,52 @@
+{% load static %}
+{% load json_filters %}  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+</head>
+<body>
+<h1>{{ title }}</h1>
+<p>Review the proposed data below and modify the `conditions_json` to make the rule robust before saving.</p>
+
+<h2>Proposal Details</h2>
+<div style="border: 1px solid #007bff; padding: 15px; margin-bottom: 20px; background-color: #f0f8ff;">
+    <p><strong>Proposed Category:</strong> <code>{{ form.initial.rule_name|default:"N/A" }}</code></p>
+    <p><strong>User Notes:</strong> <em>{{ proposal_notes|default:"(No notes provided by user)" }}</em></p>
+    <p><strong>Sample Description:</strong> <code>{{ form.initial.conditions_json|safe|escape|slice:":80" }}...</code></p>
+</div>
+
+<h2>Finalize New Rule</h2>
+
+<form method="post">
+    {% csrf_token %}
+
+    {% for field in form %}
+    <div style="margin-bottom: 15px;">
+        <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+
+        {% if field.name == 'conditions_json' %}
+        <textarea name="{{ field.name }}" id="{{ field.id_for_label }}"
+                  rows="10" cols="80">{{ field.value|json_unformat }}</textarea>
+        {% else %}
+        {{ field }}
+        {% endif %}
+
+        {% if field.help_text %}
+        <small style="display: block; color: gray;">{{ field.help_text }}</small>
+        {% endif %}
+        {% for error in field.errors %}
+        <p style="color: red;">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <button type="submit" style="background-color: #28a745; color: white; padding: 10px 20px; border: none; cursor: pointer;">
+        Approve & Create Permanent Rule
+    </button>
+    <a href="{% url 'review_proposals' %}" style="margin-left: 15px;">Cancel & Discard Proposal</a>
+</form>
+
+<p style="margin-top: 20px; color: gray;">Creating this rule will automatically resolve the original transaction and clear this proposal from the queue.</p>
+</body>
+</html>

@@ -26,4 +26,8 @@ urlpatterns = [
     path('rules/create/', views.rule_create_or_update, name='rule_create'),
     path('rules/edit/<int:rule_id>/', views.rule_create_or_update, name='rule_update'),
     path('rules/delete/<int:rule_id>/', views.rule_delete, name='rule_delete'),
+
+    # Proposal Review Paths (NEW)
+    path('rules/proposals/', views.review_proposals, name='review_proposals'),
+    path('rules/proposals/<int:unmatched_id>/finalize/', views.finalize_rule, name='finalize_rule'),
 ]

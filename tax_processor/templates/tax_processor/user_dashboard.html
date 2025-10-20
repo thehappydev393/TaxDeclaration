@@ -16,6 +16,11 @@
 
 {% if is_admin %}
 <p>You are logged in as a <strong>SUPERADMIN</strong>. You see all Declarations.</p>
+<p style="margin-top: 20px;">
+    <a href="{% url 'review_proposals' %}" style="background-color: #ffc107; color: black; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+        🔔 Review Pending Rule Proposals
+    </a>
+</p>
 {% endif %}
 
 {% if messages %}

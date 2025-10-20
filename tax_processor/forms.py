@@ -4,6 +4,24 @@ from django import forms
 from datetime import date
 from .models import Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction
 
+class UnescapedTextarea(forms.Textarea):
+    """A Textarea widget that disables HTML escaping for its value."""
+    def value_from_datadict(self, data, files, name):
+        # Prevent premature HTML escaping if the data is being re-posted
+        value = data.get(name)
+        return value
+
+    # CRITICAL METHOD: Forces Django to render the value without escaping it
+    def render(self, name, value, attrs=None, renderer=None):
+        if value is None:
+            value = ''
+
+        # Un-escape the string value before calling the base renderer
+        # This is the most reliable way to force line breaks and spaces to display correctly.
+        value = value.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+
+        return super().render(name, value, attrs, renderer)
+
 class StatementUploadForm(forms.Form):
     client_name = forms.CharField(
         max_length=100,
@@ -43,7 +61,7 @@ class TaxRuleForm(forms.ModelForm):
         model = TaxRule
         fields = ['rule_name', 'priority', 'declaration_point', 'conditions_json', 'is_active']
         widgets = {
-            'conditions_json': forms.Textarea(attrs={'rows': 10, 'cols': 80}),
+            'conditions_json': UnescapedTextarea(attrs={'rows': 10, 'cols': 80}),
             'priority': forms.NumberInput(attrs={'min': 1, 'max': 100}),
         }
         help_texts = {
