@@ -1,1 +1,5 @@
 .idea/
+*.log
+*.pot
+*.pyc
+tax_processor/__pycache__

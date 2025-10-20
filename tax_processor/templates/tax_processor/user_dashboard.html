@@ -1,0 +1,74 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Dashboard</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .alert-unmatched { background-color: #ffe0e0; color: #a00; font-weight: bold; }
+    </style>
+</head>
+<body>
+<h1>Tax Compliance Dashboard</h1>
+
+{% if is_admin %}
+<p>You are logged in as a <strong>SUPERADMIN</strong>. You see all Declarations.</p>
+{% endif %}
+
+{% if messages %}
+<ul class="messages" style="list-style: none; padding: 0;">
+    {% for message in messages %}
+    <li style="color: {% if message.tags == 'success' %}green{% elif message.tags == 'info' %}blue{% else %}red{% endif %}; margin-bottom: 10px;">{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<h2>Your Work Queue</h2>
+<p>
+    <a href="{% url 'upload_statement' %}" style="margin-right: 20px; color: green; font-weight: bold;">+ Upload New Statement Batch</a>
+    {% if is_admin %}| <a href="{% url 'rule_list' %}">Manage Rules</a>{% endif %}
+</p>
+<p>
+    <a href="{% url 'review_queue' %}" style="font-size: 1.1em; color: #cc6600;">
+        Review Unmatched Transactions
+    </a>
+</p>
+
+<h2>Your Declarations</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Declaration Name</th>
+        <th>Period</th>
+        <th>Statements</th>
+        <th>Total TXNs</th>
+        <th>Pending Review</th>
+        <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for declaration in declarations %}
+    <tr>
+        <td><strong>{{ declaration.name }}</strong></td>
+        <td>{{ declaration.tax_period_start|date:"Y-m-d" }} to {{ declaration.tax_period_end|date:"Y-m-d" }}</td>
+        <td>{{ declaration.statement_count }}</td>
+        <td>{{ declaration.total_transactions }}</td>
+        <td class="{% if declaration.unmatched_count > 0 %}alert-unmatched{% endif %}">
+            {{ declaration.unmatched_count }}
+        </td>
+        <td>
+            <a href="{% url 'declaration_detail' declaration.id %}">View/Analyze</a>
+        </td>
+    </tr>
+    {% empty %}
+    <tr>
+        <td colspan="6">No declarations created yet. Use the Upload link to begin.</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</body>
+</html>

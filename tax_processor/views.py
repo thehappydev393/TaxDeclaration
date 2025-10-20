@@ -4,13 +4,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.db import IntegrityError
-from django.db.models import Sum, F # For Tax Reporting
+from django.db.models import Q, Count
 from .forms import StatementUploadForm, TaxRuleForm
 from .services import import_statement_service
 from .rules_engine import RulesEngine
 from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction
 from datetime import date
-import json # Used for initial rule boilerplate
+import json
 
 # -----------------------------------------------------------
 # 1. PERMISSION HELPERS
@@ -58,6 +58,7 @@ def upload_statement(request):
                         'tax_period_end': period_end,
                         'client_reference': user_client_name,
                         'status': 'DRAFT',
+                        'created_by': request.user,
                     }
                 )
                 if created:
@@ -98,11 +99,19 @@ def upload_statement(request):
 
     return render(request, 'tax_processor/upload_statement.html', {'form': form})
 
+def filter_declarations_by_user(user):
+    """Filters declarations based on user role (Superadmin sees all; Regular User sees only their own)."""
+    if is_superadmin(user):
+        return Declaration.objects.all()
+    else:
+        # Regular users only see declarations they created
+        return Declaration.objects.filter(created_by=user)
 
 @user_passes_test(is_permitted_user)
 def declaration_detail(request, declaration_id):
     """Displays declaration summary and provides the link/button to trigger analysis."""
-    declaration = get_object_or_404(Declaration, pk=declaration_id)
+    declaration_qs = filter_declarations_by_user(request.user)
+    declaration = get_object_or_404(declaration_qs, pk=declaration_id)
 
     # Calculate stats
     total_statements = declaration.statements.count()
@@ -132,7 +141,7 @@ def run_declaration_analysis(request, declaration_id):
         matched, unmatched = engine.run_analysis(assigned_user=assigned_user)
 
         messages.success(request, f"Analysis Complete for '{declaration.name}'.")
-        messages.info(f"Matched {matched} transactions. Found {unmatched} new transactions requiring manual review.")
+        messages.info(request, f"Matched {matched} transactions. Found {unmatched} new transactions requiring manual review.")
 
         # Redirect back to the detail page
         return redirect('declaration_detail', declaration_id=declaration.pk)
@@ -201,10 +210,62 @@ def rule_delete(request, rule_id):
     messages.warning(request, "Deletion requires POST confirmation.")
     return redirect('rule_list')
 
-# -----------------------------------------------------------
-# 4. UNMATCHED REVIEW QUEUE (Next phase implementation)
-# -----------------------------------------------------------
+@user_passes_test(is_permitted_user)
+def user_dashboard(request):
+    """
+    Displays the list of Declarations created by the user (or all for Superadmin).
+    """
+    user = request.user
 
-# Future: @user_passes_test(is_permitted_user)
-# Future: def review_queue(request):
-# Future: def resolve_transaction(request, unmatched_id):
+    # Use the filtering helper function we already created
+    declarations_qs = filter_declarations_by_user(user)
+
+    # Annotate the queryset to efficiently count related data for the dashboard view
+    declarations = declarations_qs.annotate(
+        statement_count=Count('statements', distinct=True),
+        total_transactions=Count('statements__transactions', distinct=True),
+        unmatched_count=Count(
+            'statements__transactions__unmatched_record',
+            filter=Q(statements__transactions__unmatched_record__status='PENDING_REVIEW'),
+            distinct=True
+        )
+    ).order_by('-tax_period_start')
+
+    context = {
+        'declarations': declarations,
+        'is_admin': is_superadmin(user),
+    }
+    return render(request, 'tax_processor/user_dashboard.html', context)
+
+
+@user_passes_test(is_permitted_user)
+def review_queue(request):
+    """
+    Displays the list of PENDING_REVIEW transactions assigned to the current user.
+    """
+    user = request.user
+
+    # Superadmins can see all pending items; Regular users only see items assigned to them.
+    if is_superadmin(user):
+        unmatched_qs = UnmatchedTransaction.objects.filter(status='PENDING_REVIEW')
+        title = "Superadmin Review Queue (All Pending)"
+    else:
+        unmatched_qs = UnmatchedTransaction.objects.filter(
+            assigned_user=user,
+            status='PENDING_REVIEW'
+        )
+        title = f"{user.username}'s Pending Reviews"
+
+    # Pre-fetch the related transaction and statement data to avoid multiple database queries
+    unmatched_items = unmatched_qs.select_related(
+        'transaction__statement__declaration',
+        'transaction__matched_rule'
+    ).order_by('-transaction__transaction_date')
+
+    context = {
+        'title': title,
+        'unmatched_items': unmatched_items,
+        'is_admin': is_superadmin(user),
+        # Future: Pass the resolution form here when implemented
+    }
+    return render(request, 'tax_processor/review_queue.html', context)

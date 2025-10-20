@@ -1,0 +1,61 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Review Queue</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
+        th { background-color: #f4f4f4; }
+        .pending { color: #cc6600; font-weight: bold; }
+    </style>
+</head>
+<body>
+<h1>{{ title }}</h1>
+
+{% if messages %}
+<ul class="messages" style="list-style: none; padding: 0;">
+    {% for message in messages %}
+    <li style="color: {% if message.tags == 'success' %}green{% else %}red{% endif %}; margin-bottom: 10px;">{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<p>Return to <a href="{% url 'user_dashboard' %}">Dashboard</a>.</p>
+
+{% if unmatched_items %}
+<table>
+    <thead>
+    <tr>
+        <th>Date</th>
+        <th>Amount / Currency</th>
+        <th>Description & Sender</th>
+        <th>Declaration</th>
+        <th>Status</th>
+        <th>Action</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for item in unmatched_items %}
+    <tr>
+        <td>{{ item.transaction.transaction_date|date:"Y-m-d H:i" }}</td>
+        <td><strong>{{ item.transaction.amount }} {{ item.transaction.currency }}</strong></td>
+        <td>
+            {{ item.transaction.description }}<br>
+            <small>Sender: {{ item.transaction.sender }} (Acc: {{ item.transaction.sender_account|default:"N/A" }})</small>
+        </td>
+        <td>{{ item.transaction.statement.declaration.name }}</td>
+        <td class="pending">{{ item.status }}</td>
+        <td>
+            <a href="#">Resolve</a>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p style="color: green; margin-top: 20px;">🎉 Your review queue is clear! All transactions are matched or resolved.</p>
+{% endif %}
+</body>
+</html>

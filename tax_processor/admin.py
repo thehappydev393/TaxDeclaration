@@ -5,7 +5,7 @@ from django.utils.html import format_html
 from django.urls import reverse
 from .models import (
     UserProfile, Declaration, Statement, TaxRule,
-    Transaction, UnmatchedTransaction
+    Transaction, UnmatchedTransaction, DeclarationPoint
 )
 
 # -----------------------------------------------------------
@@ -105,21 +105,30 @@ class StatementAdmin(admin.ModelAdmin):
 # 3. Transaction and Rules Administration
 # -----------------------------------------------------------
 
+@admin.register(DeclarationPoint) # NEW REGISTRATION
+class DeclarationPointAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_income', 'description')
+    list_filter = ('is_income',)
+    search_fields = ('name',)
+    fields = ('name', 'is_income', 'description')
+
+
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
+    # 'declaration_point' is now a Foreign Key, display will automatically use the name
     list_display = ('__str__', 'statement', 'declaration_point', 'matched_rule', 'amount')
     list_filter = ('declaration_point', 'currency', 'statement__bank_name')
     search_fields = ('description', 'sender', 'sender_account')
-    # Fields that should not be edited manually after import
     readonly_fields = ('statement', 'transaction_date', 'amount', 'currency', 'description', 'sender', 'sender_account', 'matched_rule')
+
 
 @admin.register(TaxRule)
 class TaxRuleAdmin(admin.ModelAdmin):
+    # 'declaration_point' is now a Foreign Key
     list_display = ('rule_name', 'priority', 'declaration_point', 'is_active', 'created_by', 'created_at')
     list_filter = ('is_active', 'declaration_point', 'priority')
-    search_fields = ('rule_name', 'declaration_point')
+    search_fields = ('rule_name', 'declaration_point__name') # Search through the FK name
     ordering = ('priority',)
-    # Use fieldsets for better organization
     fieldsets = (
         (None, {
             'fields': ('rule_name', 'priority', 'declaration_point', 'conditions_json', 'is_active'),
@@ -129,17 +138,15 @@ class TaxRuleAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
-    # Automatically set the creator and timestamp
     def save_model(self, request, obj, form, change):
         if not obj.pk:
-            # Ensure created_by is set to the current Superuser on creation
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
 
 @admin.register(UnmatchedTransaction)
 class UnmatchedTransactionAdmin(admin.ModelAdmin):
     list_display = ('transaction', 'status', 'assigned_user', 'resolved_point', 'resolution_date')
     list_filter = ('status', 'assigned_user')
     search_fields = ('transaction__description', 'transaction__sender')
-    # Use raw_id_fields for FKs to prevent long dropdowns
     raw_id_fields = ('transaction', 'assigned_user')

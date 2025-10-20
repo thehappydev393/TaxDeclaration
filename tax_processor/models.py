@@ -54,6 +54,14 @@ class Declaration(models.Model):
     Defines a single tax filing entity (e.g., Q3 2025 for Client A).
     """
 
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_declarations',
+        verbose_name="Created By"
+    )
+
     STATUS_CHOICES = (
         ('DRAFT', 'Draft'),
         ('ANALYSIS_COMPLETE', 'Analysis Complete'),
@@ -103,6 +111,22 @@ class Statement(models.Model):
         verbose_name_plural = "Statement Files"
         ordering = ['-upload_date']
 
+class DeclarationPoint(models.Model):
+    """
+    Master data table for consistent tax declaration categories/points.
+    """
+    name = models.CharField(max_length=255, unique=True, verbose_name="Tax Category Name")
+    description = models.TextField(blank=True, verbose_name="Notes/Tax Instruction")
+    is_income = models.BooleanField(default=True, verbose_name="Is this an Income Category?")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Declaration Point (Category)"
+        verbose_name_plural = "Declaration Points (Categories)"
+        ordering = ['name']
+
 
 # ====================================================================
 # 4. TAX RULES
@@ -119,9 +143,11 @@ class TaxRule(models.Model):
         default=100,
         help_text="Lower number means higher priority (processed first)."
     )
-    declaration_point = models.CharField(
-        max_length=255,
-        help_text="The final tax category (e.g., 'Business Income - Sales')"
+    declaration_point = models.ForeignKey( # CHANGED
+        DeclarationPoint,                  # CHANGED
+        on_delete=models.SET_NULL,         # CHANGED
+        null=True,                         # CHANGED
+        help_text="The final tax category."
     )
     # Stores the complex conditions (JSON array structure)
     conditions_json = models.JSONField(help_text="JSON array defining field checks and logic.")
@@ -161,7 +187,13 @@ class Transaction(models.Model):
 
     # Analysis Result
     matched_rule = models.ForeignKey(TaxRule, on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions')
-    declaration_point = models.CharField(max_length=255, blank=True, null=True, help_text="The tax category assigned by a rule or manual resolution.")
+    declaration_point = models.ForeignKey( # CHANGED
+        DeclarationPoint,                  # CHANGED
+        on_delete=models.SET_NULL,         # CHANGED
+        null=True,                         # CHANGED
+        blank=True,
+        help_text="The tax category assigned by a rule or manual resolution."
+    )
 
     def __str__(self):
         return f"{self.transaction_date.date()} - {self.amount} {self.currency}"

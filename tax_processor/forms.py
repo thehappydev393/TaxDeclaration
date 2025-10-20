@@ -2,16 +2,9 @@
 
 from django import forms
 from datetime import date
-from .models import Declaration, TaxRule # Import TaxRule model
+from .models import Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction
 
 class StatementUploadForm(forms.Form):
-    # 1. Client/Reference Name added back
-    client_name = forms.CharField(
-        max_length=100,
-        label="Client/Reference Name",
-        help_text="Used to group statements into a Declaration."
-    )
-    # 2. Year remains the same
     year = forms.IntegerField(
         label="Tax Year",
         initial=date.today().year,
@@ -20,7 +13,6 @@ class StatementUploadForm(forms.Form):
         help_text="The declaration will cover this year plus January 31st of the following year."
     )
 
-    # 3. Multi-file upload setup
     statement_files = forms.FileField(
         label="Bank Statement Files (Excel or PDF)",
         widget=forms.FileInput,
@@ -28,21 +20,54 @@ class StatementUploadForm(forms.Form):
         help_text="Select one or more statement files (Excel or PDF)."
     )
 
-    # CRITICAL INJECTION: Force the 'multiple' attribute onto the widget
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['statement_files'].widget.attrs.update({'multiple': 'multiple'})
 
 class TaxRuleForm(forms.ModelForm):
     """Form for creating and editing Tax Rules."""
+
+    declaration_point = forms.ModelChoiceField(
+        queryset=DeclarationPoint.objects.all().order_by('name'),
+        label="Declaration Point (Category)",
+        help_text="Select the category this rule assigns transactions to."
+    )
+
     class Meta:
         model = TaxRule
         fields = ['rule_name', 'priority', 'declaration_point', 'conditions_json', 'is_active']
         widgets = {
             'conditions_json': forms.Textarea(attrs={'rows': 10, 'cols': 80}),
-            'declaration_point': forms.TextInput(attrs={'placeholder': 'e.g., Business Income - Sales'}),
             'priority': forms.NumberInput(attrs={'min': 1, 'max': 100}),
         }
         help_texts = {
             'conditions_json': 'Enter the rule logic as a JSON array (e.g., [{"logic": "AND", "checks": [...]}]).',
         }
+
+# --- 3. Resolution Form (Updated to use ModelChoiceField) ---
+
+class ResolutionForm(forms.Form):
+    """Form for a Regular User to resolve an unmatched transaction."""
+
+    # CRITICAL FIX: Change CharField to ModelChoiceField for resolved_point
+    resolved_point = forms.ModelChoiceField(
+        queryset=DeclarationPoint.objects.all().order_by('name'),
+        label="Final Tax Declaration Point",
+        help_text="Select the exact category this transaction belongs to."
+    )
+
+    propose_rule = forms.BooleanField(
+        required=False,
+        label="Propose New Rule?",
+        help_text="Check this box to suggest a new automated rule based on this transaction."
+    )
+
+    rule_notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 4}),
+        label="Rule Notes",
+        help_text="Explain the conditions (e.g., 'Match if description contains X and amount is > Y')."
+    )
+
+    # Hidden field to hold the unmatched ID for processing
+    unmatched_id = forms.IntegerField(widget=forms.HiddenInput())
