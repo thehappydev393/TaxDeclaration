@@ -1,10 +1,10 @@
-# tax_processor/urls.py
+# tax_processor/urls.py (Update)
 
-from django.urls import path, include
+from django.urls import path
 from . import views
 
 urlpatterns = [
-# Dashboard / Home view for the app
+    # Dashboard / Home view for the app
     path('', views.user_dashboard, name='user_dashboard'),
 
     # Data Ingestion Paths
@@ -16,7 +16,10 @@ urlpatterns = [
 
     # Review Queue Paths (NEW)
     path('review/', views.review_queue, name='review_queue'),
-    # Future: path('review/<int:unmatched_id>/resolve/', views.resolve_transaction, name='resolve_transaction'),
+    path('review/<int:unmatched_id>/resolve/', views.resolve_transaction, name='resolve_transaction'),
+
+    # Reporting Paths (NEW)
+    path('report/<int:declaration_id>/', views.tax_report, name='tax_report'),
 
     # Rule Management Paths
     path('rules/', views.rule_list, name='rule_list'),

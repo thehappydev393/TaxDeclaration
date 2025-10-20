@@ -5,6 +5,12 @@ from datetime import date
 from .models import Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction
 
 class StatementUploadForm(forms.Form):
+    client_name = forms.CharField(
+        max_length=100,
+        label="Client/Reference Name",
+        help_text="Used to uniquely group statements into a Declaration."
+    )
+
     year = forms.IntegerField(
         label="Tax Year",
         initial=date.today().year,

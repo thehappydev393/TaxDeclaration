@@ -48,7 +48,7 @@
         <td>{{ item.transaction.statement.declaration.name }}</td>
         <td class="pending">{{ item.status }}</td>
         <td>
-            <a href="#">Resolve</a>
+            <a href="{% url 'resolve_transaction' item.pk %}">Resolve</a>
         </td>
     </tr>
     {% endfor %}

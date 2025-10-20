@@ -1,0 +1,60 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Resolve Transaction</title>
+</head>
+<body>
+<h1>Resolve Transaction for Review ID #{{ unmatched_item.pk }}</h1>
+
+<h2>Transaction Details</h2>
+<div style="border: 1px solid #ccc; padding: 15px; margin-bottom: 20px;">
+    <p><strong>Date:</strong> {{ transaction.transaction_date }}</p>
+    <p><strong>Amount:</strong> {{ transaction.amount }} {{ transaction.currency }}</p>
+    <p><strong>Sender:</strong> {{ transaction.sender }} (Account: {{ transaction.sender_account|default:"N/A" }})</p>
+    <p><strong>Description:</strong> <em>{{ transaction.description }}</em></p>
+</div>
+
+<h2>Resolution</h2>
+<form method="post">
+    {% csrf_token %}
+
+    {{ form.resolved_point.label_tag }}
+    {{ form.resolved_point }}
+    <p style="color: gray; margin-top: 5px; margin-bottom: 20px;">{{ form.resolved_point.help_text }}</p>
+
+    <div style="border-top: 1px dashed #ccc; padding-top: 15px;">
+        <h3>System Learning (For Superadmin Review)</h3>
+        {{ form.propose_rule }}
+        {{ form.propose_rule.label_tag }}
+
+        <div id="rule-notes-section" style="margin-top: 10px;">
+            {{ form.rule_notes.label_tag }}
+            {{ form.rule_notes }}
+            <p style="color: gray; margin-top: 5px;">{{ form.rule_notes.help_text }}</p>
+        </div>
+    </div>
+
+    {{ form.unmatched_id }} <button type="submit" style="background-color: #28a745; color: white; padding: 10px 20px; border: none; cursor: pointer; margin-top: 20px;">
+    Save Resolution
+</button>
+    <a href="{% url 'review_queue' %}" style="margin-left: 15px;">Cancel</a>
+</form>
+
+<script>
+    // Simple JavaScript to show/hide rule notes based on checkbox state
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkbox = document.getElementById('id_propose_rule');
+        const notesDiv = document.getElementById('rule-notes-section');
+
+        function toggleNotes() {
+            notesDiv.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
+        checkbox.addEventListener('change', toggleNotes);
+        toggleNotes(); // Initial call
+    });
+</script>
+</body>
+</html>

@@ -129,6 +129,7 @@ class TaxRuleAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'declaration_point', 'priority')
     search_fields = ('rule_name', 'declaration_point__name') # Search through the FK name
     ordering = ('priority',)
+    readonly_fields = ('created_by', 'created_at')
     fieldsets = (
         (None, {
             'fields': ('rule_name', 'priority', 'declaration_point', 'conditions_json', 'is_active'),

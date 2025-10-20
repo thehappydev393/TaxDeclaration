@@ -5,10 +5,11 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Q, Count
-from .forms import StatementUploadForm, TaxRuleForm
+from django.utils import timezone
+from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm
 from .services import import_statement_service
 from .rules_engine import RulesEngine
-from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction
+from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile
 from datetime import date
 import json
 
@@ -34,7 +35,7 @@ def is_permitted_user(user):
 def upload_statement(request):
     """
     Handles file upload, automatically creating or retrieving the Declaration
-    based on the Client Name and Year, and iterating over multiple uploaded files.
+    based on the Client Name and Year, and assigning the task to the logged-in user.
     """
     if request.method == 'POST':
         form = StatementUploadForm(request.POST, request.FILES)
@@ -48,7 +49,9 @@ def upload_statement(request):
             user_client_name = client_name
             period_start = date(year, 1, 1)
             period_end = date(year + 1, 1, 31)
-            declaration_name = f"{year} Tax Filing - {user_client_name}"
+
+            # 2. Define the unique Declaration Name based on Year and Client Name
+            declaration_name = f"{year} Tax Filing - {client_name}"
 
             try:
                 declaration_obj, created = Declaration.objects.get_or_create(
@@ -56,7 +59,7 @@ def upload_statement(request):
                     defaults={
                         'tax_period_start': period_start,
                         'tax_period_end': period_end,
-                        'client_reference': user_client_name,
+                        'client_reference': client_name,
                         'status': 'DRAFT',
                         'created_by': request.user,
                     }
@@ -259,13 +262,104 @@ def review_queue(request):
     # Pre-fetch the related transaction and statement data to avoid multiple database queries
     unmatched_items = unmatched_qs.select_related(
         'transaction__statement__declaration',
-        'transaction__matched_rule'
+        'transaction__matched_rule',
+        'assigned_user'
     ).order_by('-transaction__transaction_date')
 
     context = {
         'title': title,
         'unmatched_items': unmatched_items,
         'is_admin': is_superadmin(user),
-        # Future: Pass the resolution form here when implemented
     }
     return render(request, 'tax_processor/review_queue.html', context)
+
+@user_passes_test(is_permitted_user)
+def resolve_transaction(request, unmatched_id):
+    """
+    Displays the form for a user to resolve an unmatched transaction and updates
+    the related Transaction and UnmatchedTransaction records.
+    """
+    unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
+    tx = unmatched_item.transaction
+
+    # Permission Check: Only the assigned user or a Superadmin can resolve
+    if not (request.user == unmatched_item.assigned_user or is_superadmin(request.user)):
+        messages.error(request, "You are not authorized to resolve this transaction.")
+        return redirect('review_queue')
+
+    if request.method == 'POST':
+        # Pass request.POST and initialize the form with the instance's transaction ID
+        form = ResolutionForm(request.POST)
+        if form.is_valid():
+            # Form uses ModelChoiceField, so we get the DeclarationPoint object
+            resolved_point_obj = form.cleaned_data['resolved_point']
+            propose_rule = form.cleaned_data['propose_rule']
+            rule_notes = form.cleaned_data['rule_notes']
+
+            # 1. Update the original Transaction record
+            tx.declaration_point = resolved_point_obj # Assign the DeclarationPoint object
+            tx.save()
+
+            # 2. Update the UnmatchedTransaction status and resolution info
+            unmatched_item.resolved_point = resolved_point_obj.name # Store name for simple audit
+            unmatched_item.resolution_date = timezone.now()
+            unmatched_item.status = 'RESOLVED'
+
+            # 3. Handle Rule Proposal (System Learning)
+            if propose_rule:
+                # Store necessary info for Superadmin to build the rule later
+                proposal_data = {
+                    'resolved_point_id': resolved_point_obj.pk,
+                    'resolved_point_name': resolved_point_obj.name,
+                    'notes': rule_notes,
+                    'sample_description': tx.description,
+                    'sample_amount': str(tx.amount),
+                }
+                unmatched_item.rule_proposal_json = proposal_data
+                unmatched_item.status = 'NEW_RULE_PROPOSED' # Change status for Superadmin filter
+                messages.info(request, "Resolution saved! New rule proposed for Superadmin review.")
+            else:
+                messages.success(request, "Transaction resolved and filed.")
+
+            unmatched_item.save()
+
+            return redirect('review_queue')
+
+    else:
+        # Initial form rendering
+        # CRITICAL: Initialize the form with the unmatched_id for hidden tracking
+        form = ResolutionForm(initial={'unmatched_id': unmatched_id})
+
+    context = {
+        'unmatched_item': unmatched_item,
+        'transaction': tx,
+        'form': form,
+    }
+    return render(request, 'tax_processor/resolve_transaction.html', context)
+
+@user_passes_test(is_permitted_user)
+def tax_report(request, declaration_id):
+    """
+    Aggregates all matched/resolved transactions for a declaration.
+    """
+
+    # Permission Check: Ensure user has access to this declaration
+    declaration_qs = filter_declarations_by_user(request.user)
+    declaration = get_object_or_404(declaration_qs, pk=declaration_id)
+
+    # CRITICAL AGGREGATION: Group transactions by declaration_point and sum the amounts
+    report_data = Transaction.objects.filter(
+        statement__declaration=declaration,
+        declaration_point__isnull=False # Only include transactions that are assigned/resolved
+    ).values('declaration_point__name', 'declaration_point__is_income').annotate(
+        total_amount=Sum('amount'),
+        transaction_count=Count('pk')
+    ).order_by('declaration_point__is_income', 'declaration_point__name')
+
+    context = {
+        'declaration': declaration,
+        'report_data': report_data,
+        # Calculate total sum of all reported amounts (for reconciliation)
+        'total_sum_all': sum(item['total_amount'] for item in report_data),
+    }
+    return render(request, 'tax_processor/tax_report.html', context)

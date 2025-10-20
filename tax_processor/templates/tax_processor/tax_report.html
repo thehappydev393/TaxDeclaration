@@ -1,0 +1,75 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tax Report: {{ declaration.name }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { border-bottom: 2px solid #ccc; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .income { background-color: #e6ffe6; color: #006400; }
+        .expense { background-color: #fff0f0; color: #a00; }
+        .total-summary { background-color: #cceeff; font-weight: bold; font-size: 1.2em; }
+        .total-section { margin-top: 30px; padding: 15px; border: 1px solid #007bff; }
+    </style>
+</head>
+<body>
+<h1>Final Tax Declaration Report</h1>
+
+<h2>{{ declaration.name }}</h2>
+<p>
+    **Period:** {{ declaration.tax_period_start|date:"Y-m-d" }} to {{ declaration.tax_period_end|date:"Y-m-d" }}<br>
+    **Client Reference:** {{ declaration.client_reference }}
+</p>
+
+<h2>Aggregated Totals by Category</h2>
+
+{% if report_data %}
+<table>
+    <thead>
+    <tr>
+        <th>Category (Declaration Point)</th>
+        <th>Type</th>
+        <th>Total Amount</th>
+        <th>Transaction Count</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for item in report_data %}
+    {% with is_income=item.declaration_point__is_income %}
+    <tr class="{% if is_income %}income{% else %}expense{% endif %}">
+        <td><strong>{{ item.declaration_point__name }}</strong></td>
+        <td>{% if is_income %}INCOME{% else %}EXPENSE / NON-TAXABLE{% endif %}</td>
+        <td>{{ item.total_amount|floatformat:2 }}</td>
+        <td>{{ item.transaction_count }}</td>
+    </tr>
+    {% endwith %}
+    {% endfor %}
+    </tbody>
+</table>
+
+<div class="total-section">
+    <h3>Report Summary</h3>
+    {% for item in report_data %}
+    {% if item.declaration_point__is_income %}
+    <p>Total **INCOME** from {{ item.declaration_point__name }}: {{ item.total_amount|floatformat:2 }}</p>
+    {% endif %}
+    {% endfor %}
+
+    <p>Total **Reported Sum (All Categories)**: {{ total_sum_all|floatformat:2 }}</p>
+</div>
+
+{% else %}
+<p>No transactions have been successfully matched or resolved yet for this declaration.</p>
+{% endif %}
+
+<hr>
+<p>
+    <a href="{% url 'declaration_detail' declaration.pk %}">Back to Declaration Detail</a> |
+    <a href="{% url 'user_dashboard' %}">Go to Dashboard</a>
+</p>
+</body>
+</html>
