@@ -5,17 +5,15 @@ from typing import Dict, Any, List, Union
 import re
 import gc
 import shutil
-import io # CRITICAL: New import for in-memory processing
+import io
 
 # --- PDF Dependency Check (unchanged) ---
 try:
     import camelot
 except ImportError:
-    # This warning is for visibility; the Django service handles the exception
     print("Warning: Camelot not installed. PDF parsing will fail. Please install it and Ghostscript.")
 
 # --- Configuration Constants ---
-# Define Armenian bank name keywords for identification
 BANK_KEYWORDS: Dict[str, List[str]] = {
     'ACBA Bank': ['ACBA', 'Akba', 'ACBA BANK OJSC'],
     'Ameriabank': ['Ameria', 'Ameriabank', 'AMERIABANK CJSC'],
@@ -32,12 +30,10 @@ BANK_KEYWORDS: Dict[str, List[str]] = {
     'FastBank': ['fastbank', 'fast bank', 'ՖԱՍԹ ԲԱՆԿ'],
 }
 
-# Structural Keywords for Robust Header Detection
 HEADER_KEYWORDS_DATE = ['ամսաթիվ', 'date', 'օր']
 HEADER_KEYWORDS_AMOUNT = ['գումար', 'amount', 'դեբետ', 'կրեդիտ', 'մուտք', 'ելք', 'daily balance']
 MAX_HEADER_SEARCH_ROWS = 50
 
-# Define the structure (headers) for the universal output file
 UNIVERSAL_HEADERS = [
     'Bank_Name',
     'Bank_File_Name',
@@ -53,7 +49,7 @@ UNIVERSAL_HEADERS = [
 
 
 # ------------------------------------------------------------------------
-# Helper Functions (Original Logic)
+# Helper Functions
 # ------------------------------------------------------------------------
 
 def identify_bank_from_text(text_content: str) -> str:
@@ -67,11 +63,8 @@ def identify_bank_from_text(text_content: str) -> str:
 
 def extract_full_content_for_search(filepath: str, file_extension: str) -> Union[List[str], str]:
     """Extracts content required for bank identification and header search."""
-    # This function is now run on the temporary file path created by default_storage.
-    # It must return content for string searching.
     try:
         if file_extension in ('.xls', '.xlsx'):
-            # Read top rows for header/bank identification only
             df = pd.read_excel(filepath, sheet_name=0, header=None, nrows=MAX_HEADER_SEARCH_ROWS, dtype=str)
             content = [" ".join(row.dropna().astype(str).values) for _, row in df.iterrows()]
             return content
@@ -82,7 +75,6 @@ def extract_full_content_for_search(filepath: str, file_extension: str) -> Union
             all_text = reader.pages[0].extract_text() or "" if reader.pages else ""
             return all_text.strip()
     except Exception as e:
-        # If Excel read fails here (e.g., format), we catch it but proceed to parse_transactions
         return ""
     return ""
 
@@ -168,8 +160,6 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
     if extension in ('.xls', '.xlsx'):
         df = pd.DataFrame()
 
-        # CRITICAL: If content_source is a file path (string), re-read it into BytesIO to ensure handle closure.
-        # This is the safest way to prevent file locking issues in a service.
         if isinstance(content_source, str):
             with open(content_source, 'rb') as f:
                 excel_content = io.BytesIO(f.read())
@@ -179,7 +169,6 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
         try:
             sheet_name = 0
 
-            # Instantiate ExcelFile from the BytesIO content
             excel_file = pd.ExcelFile(excel_content)
 
             try:
@@ -189,23 +178,18 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
             except Exception:
                 pass
 
-            # Reset the buffer position before the final read
             excel_content.seek(0)
 
-            # Use a default header index if one wasn't found
             h_index = header_index if header_index is not None and header_index >= 0 else 0
 
             if bank_name in ['ACBA Bank', 'Evocabank', 'FastBank']:
-                 # Use Multi-Row Headers
                  df = pd.read_excel(excel_content, sheet_name=sheet_name, header=[h_index, h_index + 1], dtype=str)
                  df.columns = flatten_headers(df.columns)
                  print(f"   -> Mode: Multi-Row Headers (Index {h_index} and {h_index + 1})")
 
-            else: # Ameriabank, Inecobank, IDBank (for Excel), etc.: Use Single Header Row
+            else:
                  df = pd.read_excel(excel_content, sheet_name=sheet_name, header=h_index, dtype=str)
                  print(f"   -> Mode: Single Header Row (Index {h_index})")
-
-            # ... (DEBUG LOG remains the same) ...
 
             return df
         except Exception as e:
@@ -217,11 +201,9 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
         try:
             tables = []
 
-            # Use pypdf to determine the page count
             reader = PdfReader(content_source)
             total_pages = len(reader.pages)
 
-            # --- START CRITICAL MULTI-PAGE/HYBRID FIX ---
             all_extracted_tables = []
 
             for page_num in range(1, total_pages + 1):
@@ -245,13 +227,11 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
             initial_headers = None
             initial_table_index = -1
 
-            # 1. Process the first table found (Header source)
             for i, table in enumerate(all_extracted_tables):
                 if not table.df.empty:
                     df = table.df
 
                     if initial_headers is None:
-                        # Process the first valid table found as the Header source
                         initial_headers = df.iloc[0].astype(str)
                         df.columns = initial_headers
                         initial_table_index = i
@@ -270,7 +250,6 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
                 return pd.DataFrame()
 
 
-            # 2. Process all remaining tables (pure data continuation)
             for i in range(len(all_extracted_tables)):
                 if i != initial_table_index:
                     df_rest = all_extracted_tables[i].df
@@ -278,11 +257,9 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
                     if not df_rest.empty:
                         expected_cols = initial_headers.shape[0]
 
-                        # Data on subsequent pages often re-includes the header row itself. We check for that.
                         if df_rest.iloc[0].equals(initial_headers):
                             df_rest = df_rest.iloc[1:].reset_index(drop=True)
 
-                        # Ensure column count is correct for concatenation
                         if df_rest.shape[1] == expected_cols:
                              df_rest.columns = initial_headers
                              processed_dfs.append(df_rest)
@@ -365,7 +342,7 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
             'նկարագրություն', 'մեկնաբանություն', 'նպատակ', 'բացատրություն', 'details',
             'գործարքնկարագրություն', 'գործարքինկարագրություն',
             'գործարքինկարագրությունunnamed12level1',
-            'գործարքնկարագիր',
+            'գործարքնկարագիր', # IDBank PDF addition ('Գործարք նկարագիր')
         ],
         'transaction_place': [
             'գործարքիվայրը', 'գործարքիվայրը1',
@@ -436,37 +413,48 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
     # PRIORITY 1: Explicit Inflow (ACBA Account/Card Multi-Row)
     if find_column(column_maps['explicit_inflow']) and find_column(column_maps['explicit_inflow']) in df.columns:
         amount_col_to_use = find_column(column_maps['explicit_inflow'])
+        print(f"   -> Amount logic: Using EXPLICIT INFLOW column '{amount_col_to_use}' for INFLOW.")
 
     # PRIORITY 2: Dedicated Credit Column (Ameria/Ineco/IDBank PDF)
     elif credit_col and credit_col in df.columns:
         amount_col_to_use = credit_col
+        print(f"   -> Amount logic: Using DEDICATED CREDIT column '{amount_col_to_use}' for INFLOW.")
 
     # PRIORITY 3: Single Amount/Sign Column (ACBA Card/Evocabank/Fallback)
     elif find_column(column_maps['single_amount_sign']) and find_column(column_maps['single_amount_sign']) in df.columns:
         amount_col_to_use = find_column(column_maps['single_amount_sign'])
+        print(f"   -> Amount logic: Using SINGLE AMOUNT/SIGN column '{amount_col_to_use}'.")
 
 
     if amount_col_to_use:
-        # Debugging what column was chosen
-        if amount_col_to_use == credit_col:
-             print(f"   -> Amount logic: Using DEDICATED CREDIT column '{amount_col_to_use}' for INFLOW.")
-        elif amount_col_to_use == find_column(column_maps['explicit_inflow']):
-             print(f"   -> Amount logic: Using EXPLICIT INFLOW column '{amount_col_to_use}'.")
-        elif amount_col_to_use == find_column(column_maps['single_amount_sign']):
-             print(f"   -> Amount logic: Using SINGLE AMOUNT/SIGN column '{amount_col_to_use}'.")
-
         selection = df[amount_col_to_use]
 
         # --- Handle AttributeError by ensuring Series selection ---
         if isinstance(selection, pd.DataFrame):
-            # If it's a DataFrame (due to duplicate column names after rename), force it to a Series
+            print(f"   ⚠️ Ambiguity detected: Amount column '{amount_col_to_use}' returned a DataFrame. Using first column.")
             amount_series = pd.Series(selection.iloc[:, 0].values, index=df.index).astype(str)
         else:
-            # If it's a Series (the intended result), use it directly
             amount_series = selection.astype(str)
 
         # Clean amount column and convert to numeric
-        amounts = amount_series.str.replace(r'[^\d\.\-]', '', regex=True).fillna('0')
+        amounts = amount_series
+
+        # --- CRITICAL FIX: Robust, Targeted Amount Cleaning ---
+        if bank_name == 'Evocabank':
+            # 1. Remove all thousands grouping periods (if present, though uncommon with comma decimal)
+            amounts = amounts.str.replace('.', '', regex=False)
+            # 2. Replace comma (decimal separator) with period
+            amounts = amounts.str.replace(',', '.', regex=False)
+            # 3. Keep only digits, period, and minus sign
+            amounts = amounts.str.replace(r'[^\d\.\-]', '', regex=True)
+        else:
+            # Standard logic (Covers IDBank, ACBA, Ameria, Ineco, etc.)
+            # 1. Remove all commas (assumed thousands/grouping separators)
+            amounts = amounts.str.replace(',', '', regex=False)
+            # 2. Keep only digits, periods (assumed decimal), and minus sign
+            amounts = amounts.str.replace(r'[^\d\.\-]', '', regex=True)
+        # ----------------------------------------------------------------
+
         credit_amounts = pd.to_numeric(amounts, errors='coerce').fillna(0)
 
         # FINAL LOGIC: Only keep positive values (since we are targeting incoming amounts)
@@ -504,8 +492,8 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
 
     else:
         universal_df['Description'] = create_placeholder()
+        print("   ❌ Description logic: Could not find any recognized description column.")
 
-    # ... (rest of normalization logic remains the same)
 
     sender_col = find_column(column_maps['sender'])
     universal_df['Sender'] = df[sender_col].astype(str) if sender_col in df.columns else create_placeholder()
@@ -522,7 +510,6 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
         ).str.replace(r'\s{2,}', ' ', regex=True)
     else:
         universal_df['Transaction_Place'] = create_placeholder()
-
 
     # 8. Final cleanup and logging
     final_df = universal_df.dropna(subset=['Transaction_Date', 'Amount']).copy()
