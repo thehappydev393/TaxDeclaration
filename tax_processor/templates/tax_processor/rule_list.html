@@ -3,63 +3,90 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Rule Management</title>
+    <title>Կանոնների Կառավարում</title>
     <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
+
+        /* Action Bar */
+        .action-bar { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .create-btn { background-color: #28a745; color: white; padding: 10px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; transition: background-color 0.2s; }
+        .create-btn:hover { background-color: #1e7e34; }
+
+        /* Message Styling */
+        .messages { list-style: none; padding: 0; margin-bottom: 20px; }
+        .messages li { padding: 10px 15px; border-radius: 4px; margin-bottom: 10px; font-weight: 500; }
+        .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+
+        /* Table Styling */
         table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.95em; }
+        th { background-color: #343a40; color: white; font-weight: 600; }
+        tr:hover { background-color: #f8f9fa; }
+
+        /* Priority Styling */
+        .priority-high { color: #dc3545; font-weight: bold; }
+        .priority-low { color: #6c757d; }
+        .status-active { color: #28a745; font-weight: bold; }
+        .status-inactive { color: #dc3545; }
+
+        /* Action Links */
+        .action-links a { color: #007bff; text-decoration: none; margin-right: 10px; }
+        .action-links button { color: red; border: none; background: none; cursor: pointer; padding: 0; font-size: 0.95em; }
     </style>
 </head>
 <body>
-<h1>Rule Management Dashboard</h1>
+<div class="container">
+    <h1>Կանոնների Կառավարում</h1>
 
-{% if messages %}
-<ul class="messages">
-    {% for message in messages %}
-    <li style="color: {% if message.tags == 'success' %}green{% else %}red{% endif %};">{{ message }}</li>
-    {% endfor %}
-</ul>
-{% endif %}
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 
-<p>
-    <a href="{% url 'rule_create' %}" style="background-color: #28a745; color: white; padding: 8px; text-decoration: none;">+ Create New Rule</a>
-</p>
+    <div class="action-bar">
+        <a href="{% url 'rule_create' %}" class="create-btn">+ Ստեղծել Նոր Կանոն</a>
+        <a href="{% url 'user_dashboard' %}" style="color: #007bff;">← Վերադառնալ Գլխավոր Էջ</a>
+    </div>
 
-<h2>Active Rules (Order by Priority)</h2>
-<table>
-    <thead>
-    <tr>
-        <th>Priority</th>
-        <th>Rule Name</th>
-        <th>Declaration Point</th>
-        <th>Active</th>
-        <th>Actions</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for rule in rules %}
-    <tr>
-        <td>{{ rule.priority }}</td>
-        <td>{{ rule.rule_name }}</td>
-        <td>{{ rule.declaration_point }}</td>
-        <td>{% if rule.is_active %}✅{% else %}❌{% endif %}</td>
-        <td>
-            <a href="{% url 'rule_update' rule.id %}">Edit</a> |
-            <form method="post" action="{% url 'rule_delete' rule.id %}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this rule?');">
-                {% csrf_token %}
-                <button type="submit" style="color: red; border: none; background: none; cursor: pointer; padding: 0;">Delete</button>
-            </form>
-        </td>
-    </tr>
-    {% empty %}
-    <tr>
-        <td colspan="5">No rules defined yet.</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
-
-<hr>
-<p>Go to <a href="{% url 'admin:index' %}">Admin Interface</a></p>
+    <table>
+        <thead>
+        <tr>
+            <th>Առաջնահերթություն</th>
+            <th>Կանոնի Անվանում</th>
+            <th>Հայտարարագրման Կետ</th>
+            <th>Ակտիվ</th>
+            <th>Ստեղծվել է</th>
+            <th>Գործողություններ</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for rule in rules %}
+        <tr>
+            <td class="{% if rule.priority <= 20 %}priority-high{% else %}priority-low{% endif %}">{{ rule.priority }}</td>
+            <td>{{ rule.rule_name }}</td>
+            <td>{{ rule.declaration_point.name }}</td>
+            <td class="{% if rule.is_active %}status-active{% else %}status-inactive{% endif %}">{% if rule.is_active %}✅ Այո{% else %}❌ Ոչ{% endif %}</td>
+            <td>{{ rule.created_at|date:"Y-m-d" }} ({{ rule.created_by.username }})</td>
+            <td class="action-links">
+                <a href="{% url 'rule_update' rule.id %}">Խմբագրել</a> |
+                <form method="post" action="{% url 'rule_delete' rule.id %}" style="display: inline;" onsubmit="return confirm('Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս կանոնը:');">
+                    {% csrf_token %}
+                    <button type="submit" style="color: red; border: none; background: none; cursor: pointer; padding: 0;">Ջնջել</button>
+                </form>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6" style="text-align: center; color: #6c757d;">Դեռևս կանոններ սահմանված չեն:</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
 </body>
 </html>

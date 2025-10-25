@@ -1,35 +1,142 @@
 {% load static %}
-{% load json_filters %}  <!DOCTYPE html>
+{% load json_filters %}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
+
+        /* Form Layout */
+        .field-group { margin-bottom: 25px; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: Consolas, monospace; /* Monospace font for JSON */
+            font-size: 0.9em;
+        }
+        small { display: block; color: #6c757d; margin-top: 5px; }
+        p.errorlist { color: red; margin-top: 5px; }
+
+        /* JSON specific styling */
+        .json-section {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .json-section h2 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; }
+
+        /* Button Styling */
+        button[type="submit"] {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        button[type="submit"]:hover { background-color: #0056b3; }
+        .cancel-link { color: #dc3545; margin-left: 15px; text-decoration: none; }
+    </style>
 </head>
 <body>
-<form method="post">
-    {% csrf_token %}
+<div class="container">
+    <h1>{{ title }}</h1>
 
-    {% for field in form %}
-    <div style="margin-bottom: 15px;">
-        <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+    <form method="post">
+        {% csrf_token %}
 
-        {% if field.name == 'conditions_json' %}
-        <textarea name="{{ field.name }}" id="{{ field.id_for_label }}"
-                  rows="10" cols="80">{{ field.value|json_unformat }}</textarea>
-        {% else %}
-        {{ field }}
+        {% if form.non_field_errors %}
+        <div style="color: red; padding: 10px; border: 1px solid red; margin-bottom: 15px;">
+            {{ form.non_field_errors }}
+        </div>
         {% endif %}
 
-        {% if field.help_text %}
-        <small style="display: block; color: gray;">{{ field.help_text }}</small>
-        {% endif %}
-        {% for error in field.errors %}
-        <p style="color: red;">{{ error }}</p>
-        {% endfor %}
-    </div>
-    {% endfor %}
+        <div class="field-group">
+            {% for field in form %}
+            {% if field.name != 'conditions_json' %}
+            <div>
+                <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+                {{ field }}
+                {% if field.help_text %}
+                <small>{{ field.help_text }}</small>
+                {% endif %}
+                {% for error in field.errors %}
+                <p class="errorlist">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
 
-</form>
+        <div class="json-section">
+            <h2>Կանոնի Պայմաններ (Conditions JSON)</h2>
+            <div>
+                <label for="{{ form.conditions_json.id_for_label }}">JSON Կառուցվածք:</label>
+                <textarea name="{{ form.conditions_json.name }}" id="{{ form.conditions_json.id_for_label }}"
+                          rows="10" cols="80">{{ form.conditions_json.value|json_unformat }}</textarea>
+                <small>{{ form.conditions_json.help_text }}</small>
+                {% for error in form.conditions_json.errors %}
+                <p class="errorlist">{{ error }}</p>
+                {% endfor %}
+            </div>
+        </div>
 
+        <button type="submit">Պահպանել Կանոնը</button>
+        <a href="{% url 'rule_list' %}" class="cancel-link">Չեղարկել</a>
+    </form>
+
+    <hr style="margin-top: 40px; border-color: #f4f7f6;">
+
+    <h3>JSON Կանոնի Կառուցվածքի Օրինակ:</h3>
+    <pre style="background-color: #eee; padding: 10px; border-radius: 4px; font-size: 0.85em;">
+[
+  {
+    "logic": "AND",
+    "checks": [
+      {
+        "field": "description",
+        "type": "CONTAINS_KEYWORD",
+        "value": "Wire Transfer, Invoice #"
+      },
+      {
+        "field": "currency",
+        "type": "EQUALS",
+        "value": "USD"
+      }
+    ]
+  },
+  {
+    "logic": "OR",
+    "checks": [
+      {
+        "field": "sender_account",
+        "type": "REGEX_MATCH",
+        "value": "^(123|456)"
+      }
+    ]
+  }
+]
+        </pre>
+</div>
 </body>
 </html>

@@ -1,52 +1,142 @@
 {% load static %}
-{% load json_filters %}  <!DOCTYPE html>
+{% load json_filters %}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
+    <style>
+        /* General Layout */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 30px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        h1 {
+            color: #dc3545; /* Red/Alert color for action requiring confirmation */
+            font-size: 2em;
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 10px;
+            margin-top: 0;
+            margin-bottom: 25px;
+        }
+        h2 {
+            font-size: 1.4em;
+            color: #495057;
+            margin-top: 25px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        /* Proposal Detail Box */
+        .proposal-detail-box {
+            border: 1px solid #ffc107; /* Yellow for review status */
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 6px;
+            background-color: #fff8e1;
+        }
+        .proposal-detail-box p { margin: 5px 0; font-size: 0.95em; }
+        .proposal-detail-box strong { color: #856404; }
+
+        /* Form Styling */
+        form p { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        /* JSON Textarea Styling (Crucial for readability) */
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: Consolas, monospace;
+            font-size: 0.9em;
+            min-height: 250px;
+            background-color: #f8f9fa;
+        }
+
+        /* Button Styling */
+        .button-group { margin-top: 25px; }
+        .approve-btn {
+            padding: 12px 25px;
+            background-color: #28a745; /* Green for success/approval */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .approve-btn:hover { background-color: #1e7e34; }
+        .cancel-link { color: #dc3545; margin-left: 15px; text-decoration: none; }
+    </style>
 </head>
 <body>
-<h1>{{ title }}</h1>
-<p>Review the proposed data below and modify the `conditions_json` to make the rule robust before saving.</p>
+<div class="container">
+    <h1>{{ title }}</h1>
+    <p>Խնդրում ենք վերանայել օգտատիրոջ կողմից առաջարկված կանոնը և հաստատել նախքան մշտական պահպանելը։</p>
 
-<h2>Proposal Details</h2>
-<div style="border: 1px solid #007bff; padding: 15px; margin-bottom: 20px; background-color: #f0f8ff;">
-    <p><strong>Proposed Category:</strong> <code>{{ form.initial.rule_name|default:"N/A" }}</code></p>
-    <p><strong>User Notes:</strong> <em>{{ proposal_notes|default:"(No notes provided by user)" }}</em></p>
-    <p><strong>Sample Description:</strong> <code>{{ form.initial.conditions_json|safe|escape|slice:":80" }}...</code></p>
-</div>
-
-<h2>Finalize New Rule</h2>
-
-<form method="post">
-    {% csrf_token %}
-
-    {% for field in form %}
-    <div style="margin-bottom: 15px;">
-        <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
-
-        {% if field.name == 'conditions_json' %}
-        <textarea name="{{ field.name }}" id="{{ field.id_for_label }}"
-                  rows="10" cols="80">{{ field.value|json_unformat }}</textarea>
-        {% else %}
-        {{ field }}
-        {% endif %}
-
-        {% if field.help_text %}
-        <small style="display: block; color: gray;">{{ field.help_text }}</small>
-        {% endif %}
-        {% for error in field.errors %}
-        <p style="color: red;">{{ error }}</p>
-        {% endfor %}
+    <h2>Առաջարկի Մանրամասները</h2>
+    <div class="proposal-detail-box">
+        <p><strong>Առաջարկվող Կատեգորիա:</strong> <code>{{ form.initial.rule_name|default:"N/A" }}</code></p>
+        <p><strong>Օգտատիրոջ Նշումներ:</strong> <em>{{ proposal_notes|default:"(Նշումներ չեն տրամադրվել)" }}</em></p>
     </div>
-    {% endfor %}
 
-    <button type="submit" style="background-color: #28a745; color: white; padding: 10px 20px; border: none; cursor: pointer;">
-        Approve & Create Permanent Rule
-    </button>
-    <a href="{% url 'review_proposals' %}" style="margin-left: 15px;">Cancel & Discard Proposal</a>
-</form>
+    <h2>Կանոնի Վերջնական Խմբագրում</h2>
 
-<p style="margin-top: 20px; color: gray;">Creating this rule will automatically resolve the original transaction and clear this proposal from the queue.</p>
+    <form method="post">
+        {% csrf_token %}
+
+        {% for field in form %}
+        <div style="margin-bottom: 15px;">
+            <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+
+            {% if field.name == 'conditions_json' %}
+            <textarea name="{{ field.name }}" id="{{ field.id_for_label }}"
+                      rows="15" cols="80">{{ field.value|json_unformat }}</textarea>
+            {% else %}
+            {{ field }}
+            {% endif %}
+
+            {% if field.help_text %}
+            <small style="display: block; color: gray;">{{ field.help_text }}</small>
+            {% endif %}
+            {% for error in field.errors %}
+            <p style="color: red;">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        <div class="button-group">
+            <button type="submit" class="approve-btn">
+                Հաստատել և Ստեղծել Մշտական Կանոն
+            </button>
+            <a href="{% url 'review_proposals' %}" class="cancel-link">Չեղարկել և Մերժել Առաջարկը</a>
+        </div>
+    </form>
+
+    <p style="margin-top: 40px; color: #6c757d; font-size: 0.9em;">
+        Հաստատելուց հետո այս գործարքը կմաքրվի վերանայման հերթից, իսկ կանոնը կսկսի ավտոմատ կիրառվել։
+    </p>
+</div>
 </body>
 </html>

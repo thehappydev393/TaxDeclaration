@@ -3,58 +3,123 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Resolve Transaction</title>
-</head>
-<body>
-<h1>Resolve Transaction for Review ID #{{ unmatched_item.pk }}</h1>
+    <title>Լուծել Գործարքը</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
 
-<h2>Transaction Details</h2>
-<div style="border: 1px solid #ccc; padding: 15px; margin-bottom: 20px;">
-    <p><strong>Date:</strong> {{ transaction.transaction_date }}</p>
-    <p><strong>Amount:</strong> {{ transaction.amount }} {{ transaction.currency }}</p>
-    <p><strong>Sender:</strong> {{ transaction.sender }} (Account: {{ transaction.sender_account|default:"N/A" }})</p>
-    <p><strong>Description:</strong> <em>{{ transaction.description }}</em></p>
-</div>
+        /* Transaction Detail Box */
+        .detail-box {
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        .detail-box p { margin: 5px 0; font-size: 0.95em; }
+        .detail-box strong { color: #343a40; }
+        .detail-box em { color: #dc3545; font-style: normal; font-weight: bold; }
 
-<h2>Resolution</h2>
-<form method="post">
-    {% csrf_token %}
+        /* Form Styling */
+        form p { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
+        select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        textarea { resize: vertical; }
 
-    {{ form.resolved_point.label_tag }}
-    {{ form.resolved_point }}
-    <p style="color: gray; margin-top: 5px; margin-bottom: 20px;">{{ form.resolved_point.help_text }}</p>
-
-    <div style="border-top: 1px dashed #ccc; padding-top: 15px;">
-        <h3>System Learning (For Superadmin Review)</h3>
-        {{ form.propose_rule }}
-        {{ form.propose_rule.label_tag }}
-
-        <div id="rule-notes-section" style="margin-top: 10px;">
-            {{ form.rule_notes.label_tag }}
-            {{ form.rule_notes }}
-            <p style="color: gray; margin-top: 5px;">{{ form.rule_notes.help_text }}</p>
-        </div>
-    </div>
-
-    {{ form.unmatched_id }} <button type="submit" style="background-color: #28a745; color: white; padding: 10px 20px; border: none; cursor: pointer; margin-top: 20px;">
-    Save Resolution
-</button>
-    <a href="{% url 'review_queue' %}" style="margin-left: 15px;">Cancel</a>
-</form>
-
-<script>
-    // Simple JavaScript to show/hide rule notes based on checkbox state
-    document.addEventListener('DOMContentLoaded', function() {
-        const checkbox = document.getElementById('id_propose_rule');
-        const notesDiv = document.getElementById('rule-notes-section');
-
-        function toggleNotes() {
-            notesDiv.style.display = checkbox.checked ? 'block' : 'none';
+        /* Rule Proposal Section */
+        #rule-notes-section {
+            border-top: 1px dashed #ced4da;
+            padding-top: 20px;
+            margin-top: 20px;
         }
 
-        checkbox.addEventListener('change', toggleNotes);
-        toggleNotes(); // Initial call
-    });
-</script>
+        /* Button Styling */
+        .button-group { margin-top: 25px; }
+        .save-btn {
+            padding: 12px 25px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .save-btn:hover { background-color: #1e7e34; }
+        .cancel-link { color: #6c757d; margin-left: 15px; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Լուծել Գործարքը (#{{ unmatched_item.pk }})</h1>
+
+    <h2>Գործարքի Մանրամասները</h2>
+    <div class="detail-box">
+        <p><strong>Ամսաթիվ:</strong> {{ transaction.transaction_date|date:"Y-m-d H:i" }}</p>
+        <p><strong>Գումար:</strong> <em style="color: #007bff;">{{ transaction.amount }} {{ transaction.currency }}</em></p>
+        <p><strong>Ուղարկող:</strong> {{ transaction.sender }} (Հաշիվ: {{ transaction.sender_account|default:"N/A" }})</p>
+        <p><strong>Նկարագրություն:</strong> <em>{{ transaction.description }}</em></p>
+        <p><small>Պատկանում է Հայտարարագրին: {{ transaction.statement.declaration.name }}</small></p>
+    </div>
+
+    <h2>Լուծում</h2>
+    <form method="post">
+        {% csrf_token %}
+
+        <p>
+            {{ form.resolved_point.label_tag }}
+            {{ form.resolved_point }}
+            <small>{{ form.resolved_point.help_text }}</small>
+            {% for error in form.resolved_point.errors %}
+        <p style="color: red;">{{ error }}</p>
+        {% endfor %}
+        </p>
+
+        <div id="rule-proposal-section">
+            <h3>Կանոնի Առաջարկ</h3>
+            <p>
+                {{ form.propose_rule }}
+                {{ form.propose_rule.label_tag }}
+            </p>
+
+            <div id="rule-notes-section">
+                <p>
+                    {{ form.rule_notes.label_tag }}
+                    {{ form.rule_notes }}
+                    <small>{{ form.rule_notes.help_text }}</small>
+                </p>
+            </div>
+        </div>
+
+        {{ form.unmatched_id }} <div class="button-group">
+        <button type="submit" class="save-btn">Պահպանել Լուծումը</button>
+        <a href="{% url 'review_queue' %}" class="cancel-link">Չեղարկել</a>
+    </div>
+    </form>
+
+    <script>
+        // Simple JavaScript to show/hide rule notes based on checkbox state
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkbox = document.getElementById('id_propose_rule');
+            const notesDiv = document.getElementById('rule-notes-section');
+
+            function toggleNotes() {
+                notesDiv.style.display = checkbox.checked ? 'block' : 'none';
+            }
+
+            checkbox.addEventListener('change', toggleNotes);
+            toggleNotes(); // Initial call
+        });
+    </script>
+</div>
 </body>
 </html>

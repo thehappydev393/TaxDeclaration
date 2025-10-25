@@ -3,59 +3,74 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Review Queue</title>
+    <title>Վերանայման Հերթ</title>
     <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
+
+        /* Table Styling */
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
-        th { background-color: #f4f4f4; }
-        .pending { color: #cc6600; font-weight: bold; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; font-size: 0.95em; }
+        th { background-color: #343a40; color: white; font-weight: 600; }
+        tr:hover { background-color: #f8f9fa; }
+
+        /* Status and Action */
+        .status-pending { color: #cc6600; font-weight: bold; }
+        .action-link { background-color: #ffc107; color: #343a40; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-weight: bold; }
+        .action-link:hover { background-color: #e0a800; }
+        .nav-links { margin-top: 20px; }
     </style>
 </head>
 <body>
-<h1>{{ title }}</h1>
+<div class="container">
+    <h1>{{ title }}</h1>
 
-{% if messages %}
-<ul class="messages" style="list-style: none; padding: 0;">
-    {% for message in messages %}
-    <li style="color: {% if message.tags == 'success' %}green{% else %}red{% endif %}; margin-bottom: 10px;">{{ message }}</li>
-    {% endfor %}
-</ul>
-{% endif %}
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 
-<p>Return to <a href="{% url 'user_dashboard' %}">Dashboard</a>.</p>
+    <div class="nav-links">
+        <a href="{% url 'user_dashboard' %}" style="color: #007bff;">← Վերադառնալ Գլխավոր Էջ</a>
+    </div>
 
-{% if unmatched_items %}
-<table>
-    <thead>
-    <tr>
-        <th>Date</th>
-        <th>Amount / Currency</th>
-        <th>Description & Sender</th>
-        <th>Declaration</th>
-        <th>Status</th>
-        <th>Action</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for item in unmatched_items %}
-    <tr>
-        <td>{{ item.transaction.transaction_date|date:"Y-m-d H:i" }}</td>
-        <td><strong>{{ item.transaction.amount }} {{ item.transaction.currency }}</strong></td>
-        <td>
-            {{ item.transaction.description }}<br>
-            <small>Sender: {{ item.transaction.sender }} (Acc: {{ item.transaction.sender_account|default:"N/A" }})</small>
-        </td>
-        <td>{{ item.transaction.statement.declaration.name }}</td>
-        <td class="pending">{{ item.status }}</td>
-        <td>
-            <a href="{% url 'resolve_transaction' item.pk %}">Resolve</a>
-        </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p style="color: green; margin-top: 20px;">🎉 Your review queue is clear! All transactions are matched or resolved.</p>
-{% endif %}
+    {% if unmatched_items %}
+    <table>
+        <thead>
+        <tr>
+            <th>Ամսաթիվ</th>
+            <th>Գումար / Արժույթ</th>
+            <th>Հայտարարագրում</th>
+            <th>Նկարագրություն և Ուղարկող</th>
+            <th>Կարգավիճակ</th>
+            <th>Գործողություն</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in unmatched_items %}
+        <tr>
+            <td>{{ item.transaction.transaction_date|date:"Y-m-d H:i" }}</td>
+            <td><strong>{{ item.transaction.amount }} {{ item.transaction.currency }}</strong></td>
+            <td>{{ item.transaction.statement.declaration.name }}</td>
+            <td>
+                {{ item.transaction.description|truncatechars:80 }}<br>
+                <small>Ուղարկող: {{ item.transaction.sender }}</small>
+            </td>
+            <td class="status-pending">{{ item.status }}</td>
+            <td>
+                <a href="{% url 'resolve_transaction' item.pk %}" class="action-link">Լուծել</a>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #28a745; font-weight: bold; margin-top: 20px;">🎉 Ձեր վերանայման հերթը մաքուր է:</p>
+    {% endif %}
+</div>
 </body>
 </html>
