@@ -52,7 +52,7 @@ def upload_statement(request):
             period_end = date(year + 1, 1, 31)
 
             # 2. Define the unique Declaration Name based on Year and Client Name
-            declaration_name = f"{year} Tax Filing - {client_name}"
+            declaration_name = f"{year} Հայտարարագիր - {client_name}"
 
             try:
                 declaration_obj, created = Declaration.objects.get_or_create(
@@ -144,10 +144,18 @@ def run_declaration_analysis(request, declaration_id):
         engine = RulesEngine(declaration_id=declaration.pk)
         matched, new_unmatched, cleared_unmatched = engine.run_analysis(assigned_user=assigned_user)
 
-        messages.success(request, f"Analysis Complete for '{declaration.name}'.")
-        messages.info(request, f"Total Transactions Processed: {matched + new_unmatched + cleared_unmatched}")
-        messages.info(request, f"Matched {matched} new/re-evaluated transactions. Cleared {cleared_unmatched} existing review items.")
-        messages.info(request, f"Found {new_unmatched} new transactions requiring manual review.")
+        # Success Message
+        messages.success(request, f"Վերլուծությունն ավարտվեց «{declaration.name}»-ի համար:")
+
+        # Summary 1: Total processed
+        total_processed = matched + new_unmatched + cleared_unmatched
+        messages.info(request, f"Ընդհանուր մշակված գործարքներ՝ {total_processed}")
+
+        # Summary 2: Matched and Cleared
+        messages.info(request, f"Համընկել է {matched} նոր/վերագնահատված գործարք։ Մաքրվել է {cleared_unmatched} գոյություն ունեցող վերանայման գործարք։")
+
+        # Summary 3: New Unmatched Items
+        messages.info(request, f"Հայտնաբերվել է {new_unmatched} նոր գործարք, որոնք պահանջում են ձեռքով վերանայում։")
 
         # Redirect back to the detail page
         return redirect('declaration_detail', declaration_id=declaration.pk)

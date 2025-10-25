@@ -3,32 +3,131 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Statement Upload</title>
+    <title>Upload Statement - Tax Compliance</title>
+    <style>
+        /* General Layout */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        h1 {
+            color: #007bff;
+            font-size: 2em;
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        /* Message Styling */
+        .messages {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+        .messages li {
+            padding: 12px 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .messages .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+
+        /* Form Styling */
+        form p {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #495057;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        input[type="file"] {
+            padding: 10px 0;
+        }
+        input[type="text"]:focus, input[type="number"]:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 5px rgba(0, 123, 255, 0.25);
+        }
+
+        /* Button Styling */
+        button[type="submit"] {
+            padding: 12px 25px;
+            background-color: #28a745; /* Success Green */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        button[type="submit"]:hover {
+            background-color: #1e7e34;
+        }
+
+        /* Navigation Links */
+        .nav-links {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            font-size: 0.9em;
+        }
+        .nav-links a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-<h1>Upload Bank Statement</h1>
+<div class="container">
+    <h1>Statement Upload & Declaration Setup</h1>
 
-{% if messages %}
-<ul class="messages">
-    {% for message in messages %}
-    <li style="color:
-                    {% if message.tags == 'success' %}green
-                    {% elif message.tags == 'info' %}blue
-                    {% else %}red
-                    {% endif %};">
-        {{ message }}
-    </li>
-    {% endfor %}
-</ul>
-{% endif %}
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Upload and Process</button>
-</form>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
 
-<hr>
-<p>Go to <a href="{% url 'admin:index' %}">Admin Interface</a> to manage data.</p>
+        {{ form.as_p }}
+
+        <button type="submit">Upload and Process Statements</button>
+    </form>
+
+    <div class="nav-links">
+        <a href="{% url 'user_dashboard' %}">← Back to Dashboard</a>
+    </div>
+</div>
 </body>
 </html>

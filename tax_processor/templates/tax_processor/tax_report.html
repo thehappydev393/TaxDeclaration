@@ -3,73 +3,172 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tax Report: {{ declaration.name }}</title>
+    <title>Հարկային Հայտարարգիր: {{ declaration.name }}</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1, h2 { border-bottom: 2px solid #ccc; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background-color: #f4f4f4; }
-        .income { background-color: #e6ffe6; color: #006400; }
-        .expense { background-color: #fff0f0; color: #a00; }
-        .total-summary { background-color: #cceeff; font-weight: bold; font-size: 1.2em; }
-        .total-section { margin-top: 30px; padding: 15px; border: 1px solid #007bff; }
+        /* General Layout */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 30px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #007bff;
+            font-size: 2.2em;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+            margin-top: 0;
+            margin-bottom: 25px;
+        }
+        h2 {
+            font-size: 1.6em;
+            color: #495057;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        /* Summary Box */
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .summary-header strong {
+            color: #343a40;
+            font-weight: 600;
+        }
+        .summary-header span {
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        /* Table Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+        th {
+            background-color: #343a40;
+            color: white;
+            font-weight: 600;
+        }
+
+        /* Category Styling */
+        .income-group { border-top: 3px solid #28a745; }
+        .expense-group { border-top: 3px solid #dc3545; }
+
+        .income-row { background-color: #f6fff6; color: #155724; }
+        .expense-row { background-color: #fff6f6; color: #721c24; }
+
+        .total-row {
+            background-color: #e6f7ff;
+            font-weight: bold;
+            font-size: 1.1em;
+            border-top: 2px solid #007bff;
+        }
+        .total-row td {
+            padding-top: 15px;
+            padding-bottom: 15px;
+        }
+
+        /* Navigation and Buttons */
+        .nav-links {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 0.9em;
+        }
+        .nav-links a {
+            color: #007bff;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
-<h1>Final Tax Declaration Report</h1>
+<div class="container">
+    <h1>Վերջնական Հարկային Հայտարարգիր</h1>
 
-<h2>{{ declaration.name }}</h2>
-<p>
-    **Period:** {{ declaration.tax_period_start|date:"Y-m-d" }} to {{ declaration.tax_period_end|date:"Y-m-d" }}<br>
-    **Client Reference:** {{ declaration.client_reference }}
-</p>
+    <div class="summary-header">
+        <strong>Հայտարարություն:</strong> <span>{{ declaration.name }}</span>
+        <strong>Ժամանակահատված:</strong> <span>{{ declaration.tax_period_start|date:"Y-m-d" }} - {{ declaration.tax_period_end|date:"Y-m-d" }}</span>
+    </div>
 
-<h2>Aggregated Totals by Category</h2>
+    {% if report_data %}
+    <h2>Վերլուծության Արդյունքները</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Կատեգորիա (Հաշվետու կետ)</th>
+            <th>Տեսակ</th>
+            <th>Գործարքների Քանակ</th>
+            <th>Ընդհանուր Գումար</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% regroup report_data by declaration_point__is_income as report_by_type %}
 
-{% if report_data %}
-<table>
-    <thead>
-    <tr>
-        <th>Category (Declaration Point)</th>
-        <th>Type</th>
-        <th>Total Amount</th>
-        <th>Transaction Count</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for item in report_data %}
-    {% with is_income=item.declaration_point__is_income %}
-    <tr class="{% if is_income %}income{% else %}expense{% endif %}">
-        <td><strong>{{ item.declaration_point__name }}</strong></td>
-        <td>{% if is_income %}INCOME{% else %}EXPENSE / NON-TAXABLE{% endif %}</td>
-        <td>{{ item.total_amount|floatformat:2 }}</td>
-        <td>{{ item.transaction_count }}</td>
-    </tr>
-    {% endwith %}
-    {% endfor %}
-    </tbody>
-</table>
+        {% for group in report_by_type %}
 
-<div class="total-section">
-    <h3>Report Summary</h3>
-    {% for item in report_data %}
-    {% if item.declaration_point__is_income %}
-    <p>Total **INCOME** from {{ item.declaration_point__name }}: {{ item.total_amount|floatformat:2 }}</p>
+        <tr class="{% if group.grouper %}income-group{% else %}expense-group{% endif %}">
+            <td colspan="4" style="font-size: 1.2em; font-weight: bold; background-color: #f0f0f0;">
+                {% if group.grouper %}
+                ԵԿԱՄՈՒՏՆԵՐ (INCOME)
+                {% else %}
+                ԾԱԽՍԵՐ ԵՎ ՈՉ-ՀԱՐԿՎՈՂ (EXPENSES / NON-TAXABLE)
+                {% endif %}
+            </td>
+        </tr>
+
+        {% for item in group.list %}
+        <tr class="{% if group.grouper %}income-row{% else %}expense-row{% endif %}">
+            <td>{{ item.declaration_point__name }}</td>
+            <td>{% if group.grouper %}Եկամուտ{% else %}Ծախս/Ոչ-հարկվող{% endif %}</td>
+            <td>{{ item.transaction_count }}</td>
+            <td>{{ item.total_amount|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+
+        {% endfor %}
+
+        <tr class="total-row">
+            <td colspan="3">ԸՆԴՀԱՆՈՒՐ ՀԱՄԱՐ. (Բոլոր Գործարքները)</td>
+            <td>{{ total_sum_all|floatformat:2 }}</td>
+        </tr>
+        </tbody>
+    </table>
+
+    {% else %}
+    <p style="padding: 15px; background-color: #ffe0e0; border-left: 5px solid red;">
+        ⚠️ Այս հայտարարության համար դեռևս չկան համընկած կամ լուծված գործարքներ։ Խնդրում ենք կատարել վերլուծություն կամ վերանայել սպասվող գործարքները։
+    </p>
     {% endif %}
-    {% endfor %}
 
-    <p>Total **Reported Sum (All Categories)**: {{ total_sum_all|floatformat:2 }}</p>
+    <div class="nav-links">
+        <a href="{% url 'declaration_detail' declaration.pk %}">← Վերադառնալ Մանրամասներ</a>
+        <a href="{% url 'user_dashboard' %}">Գնալ Գլխավոր Էջ</a>
+    </div>
 </div>
-
-{% else %}
-<p>No transactions have been successfully matched or resolved yet for this declaration.</p>
-{% endif %}
-
-<hr>
-<p>
-    <a href="{% url 'declaration_detail' declaration.pk %}">Back to Declaration Detail</a> |
-    <a href="{% url 'user_dashboard' %}">Go to Dashboard</a>
-</p>
 </body>
 </html>

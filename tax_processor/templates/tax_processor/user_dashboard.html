@@ -3,91 +3,211 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>User Dashboard</title>
+    <title>Tax Compliance Dashboard</title>
     <style>
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background-color: #f4f4f4; }
-        .alert-unmatched { background-color: #ffe0e0; color: #a00; font-weight: bold; }
+        /* General Reset and Typography */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* Main Layout */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Header and Status Bar */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #007bff;
+            font-size: 2em;
+            margin: 0;
+        }
+        .user-status {
+            font-size: 0.9em;
+            color: #555;
+        }
+        .user-status strong {
+            font-weight: 600;
+        }
+
+        /* Message Styling */
+        .messages {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+        .messages li {
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+
+        /* Action Buttons and Links */
+        .action-area {
+            margin-bottom: 30px;
+        }
+        .action-area a, .action-area button {
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-right: 10px;
+            transition: background-color 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .action-area .upload-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        .action-area .rule-btn {
+            background-color: #6c757d;
+            color: white;
+        }
+        .action-area .review-link {
+            color: #dc3545;
+            font-size: 1.1em;
+        }
+
+        /* Table Styling */
+        h2 {
+            font-size: 1.5em;
+            color: #007bff;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+        th {
+            background-color: #e9ecef;
+            color: #495057;
+            font-weight: 600;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        /* Specific Status Indicators */
+        .alert-unmatched {
+            background-color: #fff3cd;
+            color: #856404;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-<h1>Tax Compliance Dashboard</h1>
+<div class="container">
 
-<div style="text-align: right; margin-bottom: 15px;">
-    {% if user.is_authenticated %}
-    <span style="font-size: 0.9em; color: #555;">Logged in as: <strong>{{ user.username }}</strong></span> |
+    <div class="header-bar">
+        <h1>Tax Compliance System</h1>
+        <div class="user-status">
+            {% if user.is_authenticated %}
+            Logged in as: <strong>{{ user.username }}</strong>
+            <form method="post" action="{% url 'logout' %}" style="display: inline; margin-left: 15px;">
+                {% csrf_token %}
+                <button type="submit" style="color: #a00; border: none; background: none; cursor: pointer; padding: 0; font-size: 1em; text-decoration: underline;">
+                    Logout
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
 
-    <form method="post" action="{% url 'logout' %}" style="display: inline;">
-        {% csrf_token %}
-        <button type="submit" style="color: #a00; border: none; background: none; cursor: pointer; padding: 0; font-size: 0.9em;">
-            Logout
-        </button>
-    </form>
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
     {% endif %}
+
+    {% if is_admin %}
+    <p style="background-color: #f0f8ff; padding: 10px; border-left: 4px solid #007bff;">
+        You are logged in as a <strong>SUPERADMIN</strong>. You see all Declarations and have access to management tools.
+    </p>
+    {% endif %}
+
+    <div class="action-area">
+        <a href="{% url 'upload_statement' %}" class="upload-btn">
+            + Upload New Statements
+        </a>
+
+        {% if is_admin %}
+        <a href="{% url 'rule_list' %}" class="rule-btn">
+            Manage Rules
+        </a>
+
+        <a href="{% url 'review_proposals' %}" style="margin-left: 20px;">
+            <span style="color: #ff8c00;">🔔 Review Pending Rule Proposals</span>
+        </a>
+        {% endif %}
+
+        <a href="{% url 'review_queue' %}" class="review-link" style="margin-left: 20px;">
+            Review Assigned Transactions
+        </a>
+    </div>
+
+    <h2>Your Declarations</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Declaration Name</th>
+            <th>Period</th>
+            <th>Statements</th>
+            <th>Total TXNs</th>
+            <th>Pending Review</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for declaration in declarations %}
+        <tr>
+            <td><strong>{{ declaration.name }}</strong></td>
+            <td>{{ declaration.tax_period_start|date:"Y-m-d" }} to {{ declaration.tax_period_end|date:"Y-m-d" }}</td>
+            <td>{{ declaration.statement_count }}</td>
+            <td>{{ declaration.total_transactions }}</td>
+            <td class="{% if declaration.unmatched_count > 0 %}alert-unmatched{% endif %}">
+                {{ declaration.unmatched_count }}
+            </td>
+            <td>
+                <a href="{% url 'declaration_detail' declaration.id %}" style="color: #007bff;">View/Analyze</a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6">No declarations created yet. Use the Upload link to begin.</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
-
-
-{% if is_admin %}
-<p>You are logged in as a <strong>SUPERADMIN</strong>. You see all Declarations.</p>
-<p style="margin-top: 20px;">
-    <a href="{% url 'review_proposals' %}" style="background-color: #ffc107; color: black; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-        🔔 Review Pending Rule Proposals
-    </a>
-</p>
-{% endif %}
-
-{% if messages %}
-<ul class="messages" style="list-style: none; padding: 0;">
-    {% for message in messages %}
-    <li style="color: {% if message.tags == 'success' %}green{% elif message.tags == 'info' %}blue{% else %}red{% endif %}; margin-bottom: 10px;">{{ message }}</li>
-    {% endfor %}
-</ul>
-{% endif %}
-
-<h2>Your Work Queue</h2>
-<p>
-    <a href="{% url 'upload_statement' %}" style="margin-right: 20px; color: green; font-weight: bold;">+ Upload New Statement Batch</a>
-    {% if is_admin %}| <a href="{% url 'rule_list' %}">Manage Rules</a>{% endif %}
-</p>
-<p>
-    <a href="{% url 'review_queue' %}" style="font-size: 1.1em; color: #cc6600;">
-        Review Unmatched Transactions
-    </a>
-</p>
-
-<h2>Your Declarations</h2>
-<table>
-    <thead>
-    <tr>
-        <th>Declaration Name</th>
-        <th>Period</th>
-        <th>Statements</th>
-        <th>Total TXNs</th>
-        <th>Pending Review</th>
-        <th>Actions</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for declaration in declarations %}
-    <tr>
-        <td><strong>{{ declaration.name }}</strong></td>
-        <td>{{ declaration.tax_period_start|date:"Y-m-d" }} to {{ declaration.tax_period_end|date:"Y-m-d" }}</td>
-        <td>{{ declaration.statement_count }}</td>
-        <td>{{ declaration.total_transactions }}</td>
-        <td class="{% if declaration.unmatched_count > 0 %}alert-unmatched{% endif %}">
-            {{ declaration.unmatched_count }}
-        </td>
-        <td>
-            <a href="{% url 'declaration_detail' declaration.id %}">View/Analyze</a>
-        </td>
-    </tr>
-    {% empty %}
-    <tr>
-        <td colspan="6">No declarations created yet. Use the Upload link to begin.</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
 </body>
 </html>

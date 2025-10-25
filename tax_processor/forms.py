@@ -25,23 +25,21 @@ class UnescapedTextarea(forms.Textarea):
 class StatementUploadForm(forms.Form):
     client_name = forms.CharField(
         max_length=100,
-        label="Client/Reference Name",
-        help_text="Used to uniquely group statements into a Declaration."
+        label="Հաճախորդի անվանումը", # Client/Reference Name
+        help_text="Օգտագործվում է Հայտարարգիրները մեկ Հայտարարության մեջ խմբավորելու համար:" # Used to group statements into a Declaration.
     )
-
     year = forms.IntegerField(
-        label="Tax Year",
+        label="Հարկային Տարի", # Tax Year
         initial=date.today().year,
-        min_value=2000,
+        min_value=2020,
         max_value=2099,
-        help_text="The declaration will cover this year plus January 31st of the following year."
+        help_text="Հայտարարությունը կներառի ընթացիկ տարին գումարած հաջորդ տարվա հունվարի 31-ը:" # The declaration will cover this year plus January 31st of the following year.
     )
-
     statement_files = forms.FileField(
-        label="Bank Statement Files (Excel or PDF)",
+        label="Բանկային քաղվածքի ֆայլեր (Excel կամ PDF)", # Bank Statement Files (Excel or PDF)
         widget=forms.FileInput,
         required=False,
-        help_text="Select one or more statement files (Excel or PDF)."
+        help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF):" # Select one or more statement files (Excel or PDF).
     )
 
     def __init__(self, *args, **kwargs):

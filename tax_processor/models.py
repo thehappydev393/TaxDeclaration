@@ -68,7 +68,7 @@ class Declaration(models.Model):
         ('FILED', 'Filed'),
     )
 
-    name = models.CharField(max_length=255, unique=True, help_text="e.g., Q3 2025 - Client A Tax Filing")
+    name = models.CharField(max_length=255, unique=True, help_text="e.g., 2024 - Client A Հայտարարագիր")
     tax_period_start = models.DateField()
     tax_period_end = models.DateField()
     client_reference = models.CharField(max_length=100, blank=True, help_text="External Client ID or Business Name")
