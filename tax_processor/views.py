@@ -239,7 +239,8 @@ def rule_delete(request, rule_id):
 @user_passes_test(is_permitted_user)
 def user_dashboard(request):
     """
-    Displays the list of Declarations created by the user (or all for Superadmin).
+    Displays the list of Declarations created by the user (or all for Superadmin),
+    and checks for pending rule proposals.
     """
     user = request.user
 
@@ -257,32 +258,58 @@ def user_dashboard(request):
         )
     ).order_by('-tax_period_start')
 
+    # --- CRITICAL NEW LOGIC: Count total pending rule proposals (Superadmin task) ---
+    pending_proposals_count = 0
+    if is_superadmin(user):
+        pending_proposals_count = UnmatchedTransaction.objects.filter(
+            status='NEW_RULE_PROPOSED'
+        ).count()
+    # ---------------------------------------------------------------------------------
+
     context = {
         'declarations': declarations,
         'is_admin': is_superadmin(user),
+        'pending_proposals_count': pending_proposals_count, # Pass the count to the template
     }
     return render(request, 'tax_processor/user_dashboard.html', context)
 
 
 @user_passes_test(is_permitted_user)
-def review_queue(request):
+def review_queue(request, declaration_id=None): # ADDED declaration_id=None
     """
-    Displays the list of PENDING_REVIEW transactions assigned to the current user.
+    Displays the list of PENDING_REVIEW transactions, filtered by declaration_id
+    if provided, otherwise following user/admin rules.
     """
     user = request.user
 
-    # Superadmins can see all pending items; Regular users only see items assigned to them.
-    if is_superadmin(user):
-        unmatched_qs = UnmatchedTransaction.objects.filter(status='PENDING_REVIEW')
-        title = "Superadmin Review Queue (All Pending)"
-    else:
-        unmatched_qs = UnmatchedTransaction.objects.filter(
-            assigned_user=user,
-            status='PENDING_REVIEW'
-        )
-        title = f"{user.username}'s Pending Reviews"
+    # Base Query: Filter by status
+    unmatched_qs = UnmatchedTransaction.objects.filter(status='PENDING_REVIEW')
 
-    # Pre-fetch the related transaction and statement data to avoid multiple database queries
+    is_filtered_by_declaration = False
+
+    if declaration_id:
+        # If ID is provided, filter by that specific declaration and enforce access check
+        declaration = get_object_or_404(Declaration, pk=declaration_id)
+
+        # Enforce access: Only Superadmin or the creator can view this Declaration's queue
+        if not (is_superadmin(user) or declaration.created_by == user):
+            messages.error(request, "Դուք թույլտվություն չունեք դիտելու այս հայտարարագրի վերանայման հերթը։")
+            return redirect('user_dashboard')
+
+        unmatched_qs = unmatched_qs.filter(transaction__statement__declaration_id=declaration_id)
+        title = f"Վերանայման Հերթ - {declaration.name}"
+        is_filtered_by_declaration = True
+
+    elif is_superadmin(user):
+        # Admin Global View
+        title = "SUPERADMIN-ի Վերանայման Հերթ (Բոլոր Սպասողները)"
+
+    else:
+        # Regular User Global View (Only sees their own assigned items)
+        unmatched_qs = unmatched_qs.filter(assigned_user=user)
+        title = f"{user.username}-ի Սպասվող Վերանայումները"
+
+    # Pre-fetch the related transaction and statement data
     unmatched_items = unmatched_qs.select_related(
         'transaction__statement__declaration',
         'transaction__matched_rule',
@@ -293,6 +320,8 @@ def review_queue(request):
         'title': title,
         'unmatched_items': unmatched_items,
         'is_admin': is_superadmin(user),
+        'is_filtered': is_filtered_by_declaration,
+        'current_declaration_id': declaration_id,
     }
     return render(request, 'tax_processor/review_queue.html', context)
 

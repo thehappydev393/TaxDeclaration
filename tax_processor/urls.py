@@ -14,8 +14,11 @@ urlpatterns = [
     path('declaration/<int:declaration_id>/', views.declaration_detail, name='declaration_detail'),
     path('analyze/<int:declaration_id>/', views.run_declaration_analysis, name='run_analysis'),
 
-    # Review Queue Paths (NEW)
+    # Review Queue Paths
+    # 1. Global View (For Superadmin)
     path('review/', views.review_queue, name='review_queue'),
+    # 2. Filtered View (For Regular Users/Admin)
+    path('review/<int:declaration_id>/', views.review_queue, name='review_queue_declaration'),
     path('review/<int:unmatched_id>/resolve/', views.resolve_transaction, name='resolve_transaction'),
 
     # Reporting Paths (NEW)

@@ -3,7 +3,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tax Compliance Dashboard</title>
+    <link rel="icon" type="image/png" href="{% static 'tax_processor/favicon.png' %}">
+    <title>Հարկային Համապատասխանության Կառավարում</title>
     <style>
         /* General Reset and Typography */
         body {
@@ -59,10 +60,10 @@
             font-weight: 500;
         }
         .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6fb; }
         .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
 
-        /* Action Buttons and Links */
+        /* Action Buttons and Links (Top Bar) */
         .action-area {
             margin-bottom: 30px;
         }
@@ -81,13 +82,13 @@
             background-color: #28a745;
             color: white;
         }
+        .action-area .review-btn {
+            background-color: #efb508;
+            color: white;
+        }
         .action-area .rule-btn {
             background-color: #6c757d;
             color: white;
-        }
-        .action-area .review-link {
-            color: #dc3545;
-            font-size: 1.1em;
         }
 
         /* Table Styling */
@@ -121,20 +122,50 @@
             color: #856404;
             font-weight: bold;
         }
+
+        /* --- TABLE ACTION BUTTON STYLES (NEW/MODIFIED) --- */
+        .action-cell {
+            white-space: nowrap; /* Keep buttons on one line */
+        }
+        .action-cell .btn {
+            display: inline-block;
+            padding: 5px 10px;
+            margin-right: 5px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-align: center;
+        }
+        .btn-analyze {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-analyze:hover {
+            background-color: #0056b3;
+        }
+        .btn-review {
+            background-color: #dc3545; /* Red for urgent action */
+            color: white;
+        }
+        .btn-review:hover {
+            background-color: #c82333;
+        }
+        /* --- END TABLE ACTION BUTTON STYLES --- */
     </style>
 </head>
 <body>
 <div class="container">
 
     <div class="header-bar">
-        <h1>Tax Compliance System</h1>
+        <h1>Հարկային Համապատասխանության Համակարգ</h1>
         <div class="user-status">
             {% if user.is_authenticated %}
-            Logged in as: <strong>{{ user.username }}</strong>
+            <span style="font-size: 0.9em; color: #555;">Մուտք գործված է որպես: <strong>{{ user.username }}</strong></span>
             <form method="post" action="{% url 'logout' %}" style="display: inline; margin-left: 15px;">
                 {% csrf_token %}
                 <button type="submit" style="color: #a00; border: none; background: none; cursor: pointer; padding: 0; font-size: 1em; text-decoration: underline;">
-                    Logout
+                    Ելք
                 </button>
             </form>
             {% endif %}
@@ -151,59 +182,64 @@
 
     {% if is_admin %}
     <p style="background-color: #f0f8ff; padding: 10px; border-left: 4px solid #007bff;">
-        You are logged in as a <strong>SUPERADMIN</strong>. You see all Declarations and have access to management tools.
+        Դուք մուտք եք գործել որպես <strong>SUPERADMIN</strong>։ Դուք տեսնում եք բոլոր Հայտարարագրերը և ունեք կառավարման գործիքներ։
     </p>
     {% endif %}
 
     <div class="action-area">
         <a href="{% url 'upload_statement' %}" class="upload-btn">
-            + Upload New Statements
+            + Նոր Հայտարարագիր
         </a>
 
         {% if is_admin %}
         <a href="{% url 'rule_list' %}" class="rule-btn">
-            Manage Rules
+            Կառավարել Կանոնները
         </a>
 
-        <a href="{% url 'review_proposals' %}" style="margin-left: 20px;">
-            <span style="color: #ff8c00;">🔔 Review Pending Rule Proposals</span>
+        <a href="{% url 'review_queue' %}" class="review-btn">
+            Վերանայել Բոլոր Սպասվող Գործարքները
         </a>
+            {% if pending_proposals_count > 0 %}
+            <a href="{% url 'review_proposals' %}" style="margin-left: 20px; margin-top: 20px">
+                <span style="color: #ff8c00;">🔔 Վերանայել Սպասվող Կանոնների Առաջարկները</span>
+            </a>
+            {% endif %}
         {% endif %}
-
-        <a href="{% url 'review_queue' %}" class="review-link" style="margin-left: 20px;">
-            Review Assigned Transactions
-        </a>
     </div>
 
-    <h2>Your Declarations</h2>
+    <h2>Ձեր Հայտարարագրերը</h2>
     <table>
         <thead>
         <tr>
-            <th>Declaration Name</th>
-            <th>Period</th>
-            <th>Statements</th>
-            <th>Total TXNs</th>
-            <th>Pending Review</th>
-            <th>Actions</th>
+            <th>Անվանում</th>
+            <th>Տարեթիվ</th>
+            <th>Քաղվածքներ</th>
+            <th>Գործարքներ</th>
+            <th>Սպասում է Վերանայման</th>
+            <th>Գործողություններ</th>
         </tr>
         </thead>
         <tbody>
         {% for declaration in declarations %}
         <tr>
             <td><strong>{{ declaration.name }}</strong></td>
-            <td>{{ declaration.tax_period_start|date:"Y-m-d" }} to {{ declaration.tax_period_end|date:"Y-m-d" }}</td>
+            <td>{{ declaration.tax_period_start|date:"Y-m-d" }}</td>
             <td>{{ declaration.statement_count }}</td>
             <td>{{ declaration.total_transactions }}</td>
             <td class="{% if declaration.unmatched_count > 0 %}alert-unmatched{% endif %}">
                 {{ declaration.unmatched_count }}
             </td>
-            <td>
-                <a href="{% url 'declaration_detail' declaration.id %}" style="color: #007bff;">View/Analyze</a>
+            <td class="action-cell">
+                <a href="{% url 'declaration_detail' declaration.id %}" class="btn btn-analyze">Դիտել/Վերլուծել</a>
+
+                {% if declaration.unmatched_count > 0 %}
+                <a href="{% url 'review_queue_declaration' declaration.id %}" class="btn btn-review">Վերանայել</a>
+                {% endif %}
             </td>
         </tr>
         {% empty %}
         <tr>
-            <td colspan="6">No declarations created yet. Use the Upload link to begin.</td>
+            <td colspan="6">Հայտարարագրեր դեռևս չեն ստեղծվել։</td>
         </tr>
         {% endfor %}
         </tbody>

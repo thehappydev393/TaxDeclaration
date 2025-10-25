@@ -26,6 +26,12 @@
 <div class="container">
     <h1>{{ title }}</h1>
 
+    {% if is_filtered %}
+    <p><a href="{% url 'declaration_detail' current_declaration_id %}">← Վերադառնալ Հայտարարագրին</a></p>
+    {% else %}
+    <p>Վերադառնալ <a href="{% url 'user_dashboard' %}">Գլխավոր Էջ</a></p>
+    {% endif %}
+
     {% if messages %}
     <ul class="messages">
         {% for message in messages %}
