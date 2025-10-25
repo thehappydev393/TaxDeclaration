@@ -83,6 +83,7 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
                     Transaction(
                         statement=statement,
                         transaction_date=row['Transaction_Date'],
+                        provision_date=row['Provision_Date'],
                         amount=row['Amount'],
                         currency=row['Currency'],
                         description=row['Description'],

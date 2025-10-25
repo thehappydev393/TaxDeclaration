@@ -179,6 +179,7 @@ class Transaction(models.Model):
 
     # Core Data
     transaction_date = models.DateTimeField()
+    provision_date = models.DateTimeField(null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=10)
     description = models.TextField()

@@ -28,6 +28,7 @@ BANK_KEYWORDS: Dict[str, List[str]] = {
     'InecoBank': ['InecoBank', 'Ineco', 'InectoBank', 'Ինեկո'],
     'Unibank': ['Unibank', 'Uni Bank'],
     'FastBank': ['fastbank', 'fast bank', 'ՖԱՍԹ ԲԱՆԿ'],
+    'AEB': ['AEB', 'ArmEconomBank', 'ՀԱՅԷԿՈՆՈՄԲԱՆԿ'],
 }
 
 HEADER_KEYWORDS_DATE = ['ամսաթիվ', 'date', 'օր']
@@ -182,7 +183,7 @@ def parse_transactions(content_source: Union[str, io.BytesIO], extension: str, b
 
             h_index = header_index if header_index is not None and header_index >= 0 else 0
 
-            if bank_name in ['ACBA Bank', 'Evocabank', 'FastBank']:
+            if bank_name in ['ACBA Bank', 'Evocabank', 'FastBank', 'AEB']:
                  df = pd.read_excel(excel_content, sheet_name=sheet_name, header=[h_index, h_index + 1], dtype=str)
                  df.columns = flatten_headers(df.columns)
                  print(f"   -> Mode: Multi-Row Headers (Index {h_index} and {h_index + 1})")
