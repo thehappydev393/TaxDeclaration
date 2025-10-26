@@ -10,7 +10,9 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+from django.contrib.staticfiles.finders import find as staticfiles_find
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -126,7 +128,41 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# 1. CRITICAL FIX: Ensure STATIC_URL is defined.
+STATIC_URL = '/static/'
+
+# 2. Ensure STATIC_ROOT is defined (used by collectstatic)
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_collected')
+
+# 2. Directories where Django looks for source files
+STATICFILES_DIRS = [
+    # 1. Project-level static files
+    os.path.join(BASE_DIR, 'static'),
+]
+# -------------------------------------------------------------
+# CRITICAL FIX: Dynamically find the absolute path to Admin static files
+# using the finders framework, which resolves cross-platform differences.
+# -------------------------------------------------------------
+
+# Use staticfiles_find to locate a file guaranteed to be in the Admin static directory (like admin/css/base.css)
+# and then grab the root directory where it was found.
+
+# This function might return None if run too early, so we wrap it in a try-block
+try:
+    admin_base_css_path = staticfiles_find('admin/css/base.css')
+    if admin_base_css_path:
+        # Navigate from the file path back up to the base 'admin/static' directory
+        # In Linux: .../venv/lib/pythonX.X/site-packages/django/contrib/admin/static/admin/css/base.css
+        # In Windows: .../venv/Lib/site-packages/django/contrib/admin/static/admin/css/base.css
+
+        # We need to go up three levels from 'base.css' to get to the 'static' folder base.
+        admin_static_root = os.path.dirname(os.path.dirname(os.path.dirname(admin_base_css_path)))
+
+        # Add the dynamically found Admin root to the list of search directories
+        STATICFILES_DIRS.append(admin_static_root)
+except Exception:
+    # Fail gracefully if the finders framework is not fully initialized yet
+    pass
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
