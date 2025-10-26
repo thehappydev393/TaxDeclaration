@@ -76,7 +76,9 @@
             {% if field.name != 'conditions_json' %}
             <div>
                 <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+
                 {{ field }}
+
                 {% if field.help_text %}
                 <small>{{ field.help_text }}</small>
                 {% endif %}
