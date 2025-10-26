@@ -176,14 +176,6 @@ def rule_list(request):
     }
     return render(request, 'tax_processor/rule_list.html', context)
 
-def _clean_json_output(json_string):
-    """Helper to remove unwanted quotes from a JSON string's beginning and end."""
-    # Check if the string starts and ends with a quote, and remove it.
-    if json_string.startswith('"') and json_string.endswith('"'):
-        # Strips the first and last characters (the outer quotes)
-        return json_string[1:-1]
-    return json_string
-
 @user_passes_test(is_superadmin)
 def rule_create_or_update(request, rule_id=None):
     """Handles creating a new rule or updating an existing one."""
@@ -216,7 +208,7 @@ def rule_create_or_update(request, rule_id=None):
             ], indent=2, ensure_ascii=False)
 
             # 2. Assign the string to initial data (no trimming needed here, as it's not double-quoted yet)
-            initial_data['conditions_json'] = _clean_json_output(json_string)
+            initial_data['conditions_json'] = json_string
 
         form = TaxRuleForm(instance=rule, initial=initial_data)
 
@@ -466,7 +458,7 @@ def finalize_rule(request, unmatched_id):
         'declaration_point': proposal_data.get('resolved_point_id'),
         'priority': 50, # Set a medium priority default
         'is_active': True,
-        'conditions_json': _clean_json_output(formatted_json),
+        'conditions_json': formatted_json,
     }
 
     if request.method == 'POST':
