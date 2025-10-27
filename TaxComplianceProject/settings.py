@@ -137,7 +137,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_collected')
 # 2. Directories where Django looks for source files
 STATICFILES_DIRS = [
     # 1. Project-level static files
-    os.path.join(BASE_DIR, 'static'),
+#     os.path.join(BASE_DIR, 'static'),
 ]
 # -------------------------------------------------------------
 # CRITICAL FIX: Dynamically find the absolute path to Admin static files
