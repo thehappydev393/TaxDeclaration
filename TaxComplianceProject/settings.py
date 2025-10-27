@@ -13,22 +13,19 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 from django.contrib.staticfiles.finders import find as staticfiles_find
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-yd8oo@o&(uzit=)!qzd6n5ywp21-7oqx$ppvpe)5$aoi*qhqvu'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
-
+SECRET_KEY = os.getenv('SECRET_KEY')
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
 # Application definition
 
@@ -80,11 +77,11 @@ WSGI_APPLICATION = 'TaxComplianceProject.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'tax_db',         # Name of the database created in MySQL
-        'USER': 'root',         # MySQL username
-        'PASSWORD': 'secret', # MySQL password
-        'HOST': 'localhost',           # Or the IP address if MySQL is remote
-        'PORT': '3306',                # MySQL default port
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
         # Recommended option for ensuring proper transaction handling and data integrity
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
