@@ -34,18 +34,28 @@ class UserAdmin(BaseUserAdmin):
             return 'N/A'
     get_role.short_description = 'Role'
 
-    # CRITICAL FIX: Override save_model to ensure UserProfile creation
-    def save_model(self, request, obj, form, change):
-        """
-        Calls the standard save logic and then ensures a UserProfile exists.
-        """
-        super().save_model(request, obj, form, change)
+    # --- THIS IS THE FIX ---
+    # We REMOVE the custom save_model override entirely.
 
-        # Ensures the profile is created if the user was just created or if
-        # the profile was missing during an update.
-        UserProfile.objects.get_or_create(user=obj)
+    # We OVERRIDE save_related instead.
+    def save_related(self, request, form, formsets, change):
+        """
+        Custom save_related to ensure a UserProfile is created
+        if the inline form was left blank during user creation.
+        """
+        # First, save all inlines (this will create the UserProfile
+        # if the user filled out the inline form).
+        super().save_related(request, form, formsets, change)
 
-    # NOTE: The UserProfile role field is editable via the inline form itself.
+        # 'form.instance' is the User object that was just saved.
+        user = form.instance
+
+        # After the inlines have run, we check if a profile
+        # was created. If not, we create a default one.
+        # This prevents the duplicate entry error.
+        UserProfile.objects.get_or_create(user=user)
+    # --- END OF FIX ---
+
 
 # Re-register User to use the custom UserAdmin
 admin.site.unregister(User)
