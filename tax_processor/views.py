@@ -430,27 +430,45 @@ def resolve_transaction(request, unmatched_id):
 @user_passes_test(is_permitted_user)
 def tax_report(request, declaration_id):
     """
-    Aggregates all matched/resolved transactions for a declaration.
+    Aggregates all matched/resolved transactions for a declaration,
+    grouping by both category AND currency.
     """
 
     # Permission Check: Ensure user has access to this declaration
     declaration_qs = filter_declarations_by_user(request.user)
     declaration = get_object_or_404(declaration_qs, pk=declaration_id)
 
-    # CRITICAL AGGREGATION: Group transactions by declaration_point and sum the amounts
-    report_data = Transaction.objects.filter(
+    # Base query for transactions we care about
+    transactions_qs = Transaction.objects.filter(
         statement__declaration=declaration,
         declaration_point__isnull=False # Only include transactions that are assigned/resolved
-    ).values('declaration_point__name', 'declaration_point__is_income').annotate(
+    )
+
+    # 1. Aggregation by Category AND Currency
+    report_data = transactions_qs.values(
+        'declaration_point__name',
+        'declaration_point__is_income',
+        'currency' # <-- Add currency to the grouping
+    ).annotate(
         total_amount=Sum('amount'),
         transaction_count=Count('pk')
-    ).order_by('declaration_point__is_income', 'declaration_point__name')
+    ).order_by(
+        'declaration_point__is_income',
+        'declaration_point__name',
+        'currency' # <-- Add currency to the ordering
+    )
+
+    # 2. Aggregation for Grand Totals by Currency
+    currency_totals = transactions_qs.values(
+        'currency'
+    ).annotate(
+        total_amount=Sum('amount')
+    ).order_by('currency')
 
     context = {
         'declaration': declaration,
         'report_data': report_data,
-        # Calculate total sum of all reported amounts (for reconciliation)
-        'total_sum_all': sum(item['total_amount'] for item in report_data),
+        'currency_totals': currency_totals, # Pass the new currency-specific totals
     }
     return render(request, 'tax_processor/tax_report.html', context)
 

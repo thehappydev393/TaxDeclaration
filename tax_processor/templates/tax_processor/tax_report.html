@@ -5,104 +5,30 @@
     <meta charset="UTF-8">
     <title>Հարկային Հայտարարգիր: {{ declaration.name }}</title>
     <style>
-        /* General Layout */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-            color: #333;
-            margin: 0;
-            padding: 30px;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #007bff;
-            font-size: 2.2em;
-            border-bottom: 3px solid #007bff;
-            padding-bottom: 10px;
-            margin-top: 0;
-            margin-bottom: 25px;
-        }
-        h2 {
-            font-size: 1.6em;
-            color: #495057;
-            margin-top: 30px;
-            margin-bottom: 15px;
-        }
+        /* ... (all your existing CSS styles) ... */
 
-        /* Summary Box */
-        .summary-header {
-            display: flex;
-            justify-content: space-between;
-            background-color: #e9ecef;
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 30px;
-            font-size: 1.1em;
-        }
-        .summary-header strong {
-            color: #343a40;
-            font-weight: 600;
-        }
-        .summary-header span {
-            color: #007bff;
-            font-weight: bold;
-        }
-
-        /* Table Styling */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-            text-align: left;
-        }
-        th {
-            background-color: #343a40;
-            color: white;
-            font-weight: 600;
-        }
-
-        /* Category Styling */
-        .income-group { border-top: 3px solid #28a745; }
-        .expense-group { border-top: 3px solid #dc3545; }
-
-        .income-row { background-color: #f6fff6; color: #155724; }
-        .expense-row { background-color: #fff6f6; color: #721c24; }
-
+        /* NEW/MODIFIED styles for totals */
         .total-row {
             background-color: #e6f7ff;
             font-weight: bold;
             font-size: 1.1em;
             border-top: 2px solid #007bff;
         }
-        .total-row td {
+        .total-row.sub-total { /* Style for per-currency totals */
+            background-color: #f4f4f4;
+            font-weight: normal;
+            font-size: 1em;
+            border-top: 1px solid #ccc;
+        }
+        .total-row-header {
+            background-color: #343a40;
+            color: white;
+            font-size: 1.2em;
+            border-top: 3px solid #007bff;
+        }
+        .total-row-header td {
             padding-top: 15px;
             padding-bottom: 15px;
-        }
-
-        /* Navigation and Buttons */
-        .nav-links {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            font-size: 0.9em;
-        }
-        .nav-links a {
-            color: #007bff;
-            text-decoration: none;
-            margin-right: 15px;
-        }
-        .nav-links a:hover {
-            text-decoration: underline;
         }
     </style>
 </head>
@@ -123,7 +49,7 @@
             <th>Կատեգորիա (Հաշվետու կետ)</th>
             <th>Տեսակ</th>
             <th>Գործարքների Քանակ</th>
-            <th>Ընդհանուր Գումար</th>
+            <th>Արժույթ</th> <th>Ընդհանուր Գումար</th>
         </tr>
         </thead>
         <tbody>
@@ -132,8 +58,7 @@
         {% for group in report_by_type %}
 
         <tr class="{% if group.grouper %}income-group{% else %}expense-group{% endif %}">
-            <td colspan="4" style="font-size: 1.2em; font-weight: bold; background-color: #f0f0f0;">
-                {% if group.grouper %}
+            <td colspan="5" style="font-size: 1.2em; font-weight: bold; background-color: #f0f0f0;"> {% if group.grouper %}
                 ԵԿԱՄՈՒՏՆԵՐ (INCOME)
                 {% else %}
                 ԾԱԽՍԵՐ ԵՎ ՈՉ-ՀԱՐԿՎՈՂ (EXPENSES / NON-TAXABLE)
@@ -146,16 +71,26 @@
             <td>{{ item.declaration_point__name }}</td>
             <td>{% if group.grouper %}Եկամուտ{% else %}Ծախս/Ոչ-հարկվող{% endif %}</td>
             <td>{{ item.transaction_count }}</td>
-            <td>{{ item.total_amount|floatformat:2 }}</td>
+            <td><strong>{{ item.currency }}</strong></td> <td>{{ item.total_amount|floatformat:2 }}</td>
         </tr>
         {% endfor %}
 
         {% endfor %}
 
-        <tr class="total-row">
-            <td colspan="3">ԸՆԴՀԱՆՈՒՐ ՀԱՄԱՐ. (Բոլոր Գործարքները)</td>
-            <td>{{ total_sum_all|floatformat:2 }}</td>
+        <tr class="total-row-header">
+            <td colspan="5">ԸՆԴՀԱՆՈՒՐ ԱՄՓՈՓՈՒՄ (ըստ արժույթի)</td>
         </tr>
+        {% for total in currency_totals %}
+        <tr class="total-row sub-total">
+            <td colspan="3" style="text-align: right;">Ընդհանուր գումար՝</td>
+            <td><strong>{{ total.currency }}</strong></td>
+            <td><strong>{{ total.total_amount|floatformat:2 }}</strong></td>
+        </tr>
+        {% empty %}
+        <tr class="total-row sub-total">
+            <td colspan="5">Ամփոփ տվյալներ չկան:</td>
+        </tr>
+        {% endfor %}
         </tbody>
     </table>
 
