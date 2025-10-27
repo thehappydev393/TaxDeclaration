@@ -167,6 +167,6 @@ except Exception:
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # custom loging redirects
-LOGIN_REDIRECT_URL = '/app/'  # Redirect users to the dashboard after login
-LOGOUT_REDIRECT_URL = '/app/login/' # Redirect users back to the login page after logout
-LOGIN_URL = '/app/login/'
+LOGIN_REDIRECT_URL = '/'  # The new dashboard URL is the root
+LOGOUT_REDIRECT_URL = '/login/' # The new login page URL
+LOGIN_URL = '/login/' # The new login page URL

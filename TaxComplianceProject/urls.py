@@ -25,9 +25,9 @@ admin.site.index_title = "Բարի գալուստ հայտարարագրերի �
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('app/', include('tax_processor.urls')),
+    path('', include('tax_processor.urls')),
 
     # --- AUTHENTICATION PATHS (NEW) ---
-    path('app/login/', auth_views.LoginView.as_view(template_name='tax_processor/login.html'), name='login'),
-    path('app/logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('login/', auth_views.LoginView.as_view(template_name='tax_processor/login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 ]
