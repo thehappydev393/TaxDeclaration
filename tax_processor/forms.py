@@ -1,11 +1,12 @@
 # tax_processor/forms.py
 
 from django import forms
+from django.forms import formset_factory # Import formset_factory
 from datetime import date
 from .models import Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction
 
 # -----------------------------------------------------------
-# Helper Widgets (For JSON field formatting)
+# Helper Widgets
 # -----------------------------------------------------------
 
 class UnescapedTextarea(forms.Textarea):
@@ -59,28 +60,84 @@ class StatementUploadForm(forms.Form):
         self.fields['statement_files'].widget.attrs.update({'multiple': 'multiple'})
 
 # -----------------------------------------------------------
-# 2. Tax Rule Form (For Superadmin Rule Creation/Editing)
+# NEW: Dynamic Condition Form
+# -----------------------------------------------------------
+
+# Define the choices for the dropdowns based on your models and rules_engine
+TRANSACTION_FIELD_CHOICES = [
+    ('description', 'Նկարագրություն (Description)'),
+    ('sender', 'Ուղարկող (Sender)'),
+    ('sender_account', 'Ուղարկողի Հաշիվ (Sender Account)'),
+    ('amount', 'Գումար (Amount)'),
+    ('currency', 'Արժույթ (Currency)'),
+]
+
+CONDITION_TYPE_CHOICES = [
+    ('CONTAINS_KEYWORD', 'պարունակում է (contains keyword)'),
+    ('EQUALS', 'հավասար է (equals)'),
+    ('REGEX_MATCH', 'համընկնում է REGEX-ին (regex match)'),
+    ('GREATER_THAN', 'մեծ է (>)'),
+    ('LESS_THAN', 'փոքր է (<)'),
+]
+
+class ConditionForm(forms.Form):
+    """
+    A single form representing one check in the rules engine.
+    e.g., [Field: description] [Type: CONTAINS_KEYWORD] [Value: 'Salary']
+    """
+    field = forms.ChoiceField(
+        choices=TRANSACTION_FIELD_CHOICES,
+        label="Դաշտ",
+        widget=forms.Select(attrs={'class': 'condition-field'})
+    )
+    condition_type = forms.ChoiceField(
+        choices=CONDITION_TYPE_CHOICES,
+        label="Պայման",
+        widget=forms.Select(attrs={'class': 'condition-type'})
+    )
+    value = forms.CharField(
+        label="Արժեք",
+        widget=forms.TextInput(attrs={'class': 'condition-value', 'placeholder': 'Enter value...'})
+    )
+
+# Create a FormSet factory from the new ConditionForm
+# extra=1 shows one blank form by default.
+# can_delete=True adds a checkbox for deleting rows.
+BaseConditionFormSet = formset_factory(ConditionForm, extra=1, can_delete=True)
+
+
+# -----------------------------------------------------------
+# 2. Tax Rule Form (MODIFIED)
 # -----------------------------------------------------------
 
 class TaxRuleForm(forms.ModelForm):
-    """Form for creating and editing Tax Rules."""
+    """
+    Form for creating and editing Tax Rules.
+    NOW uses a dynamic logic dropdown instead of the JSON textarea.
+    """
 
-    # CRITICAL FIX: Use the custom choice field to handle the "Name - Description" display.
     declaration_point = DeclarationPointChoiceField(
         queryset=DeclarationPoint.objects.all().order_by('name'),
         label="Հայտարարագրման Կետ (Category)",
         help_text="Ընտրեք այն կատեգորիան, որին կփոխանցվեն համապատասխան գործարքները։"
     )
 
+    # NEW: Logic dropdown
+    logic = forms.ChoiceField(
+        choices=[
+            ('AND', 'Համընկնում են ԲՈԼՈՐ պայմանները (AND)'),
+            ('OR', 'Համընկնում է ՑԱՆԿԱՑԱԾ պայման (OR)'),
+        ],
+        label="Կանոնի Տրամաբանություն",
+        help_text="Ինչպես պետք է համակցվեն ստորև նշված պայմանները:"
+    )
+
     class Meta:
         model = TaxRule
-        fields = ['rule_name', 'priority', 'declaration_point', 'conditions_json', 'is_active']
+        # REMOVED 'conditions_json' from fields
+        fields = ['rule_name', 'priority', 'declaration_point', 'is_active']
         widgets = {
-            'conditions_json': UnescapedTextarea(attrs={'rows': 10, 'cols': 80}),
             'priority': forms.NumberInput(attrs={'min': 1, 'max': 100}),
-        }
-        help_texts = {
-            'conditions_json': 'Մուտքագրեք կանոնի տրամաբանությունը որպես JSON զանգված։',
         }
 
 

@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Q, Count, Sum
 from django.utils import timezone
-from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm
+from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet
 from .services import import_statement_service
 from .rules_engine import RulesEngine
 from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile
@@ -178,7 +178,10 @@ def rule_list(request):
 
 @user_passes_test(is_superadmin)
 def rule_create_or_update(request, rule_id=None):
-    """Handles creating a new rule or updating an existing one."""
+    """
+    Handles creating a new rule or updating an existing one using
+    a dynamic formset for conditions.
+    """
     if rule_id:
         rule = get_object_or_404(TaxRule, pk=rule_id)
         title = f"Update Rule: {rule.rule_name}"
@@ -186,34 +189,77 @@ def rule_create_or_update(request, rule_id=None):
         rule = None
         title = "Create New Tax Rule"
 
+    # A "prefix" is necessary when using multiple formsets on one page
+    formset_prefix = 'conditions'
+
     if request.method == 'POST':
         form = TaxRuleForm(request.POST, instance=rule)
-        if form.is_valid():
+        formset = BaseConditionFormSet(request.POST, prefix=formset_prefix)
+
+        if form.is_valid() and formset.is_valid():
             new_rule = form.save(commit=False)
 
             if not new_rule.pk:
                 new_rule.created_by = request.user
 
+            # --- SERIALIZE FORMSET DATA TO JSON ---
+            checks = []
+            for check_form in formset.cleaned_data:
+                # Only include non-empty forms that haven't been marked for deletion
+                if check_form and not check_form.get('DELETE'):
+                    checks.append({
+                        'field': check_form['field'],
+                        'type': check_form['condition_type'],
+                        'value': check_form['value']
+                    })
+
+            # We wrap it in a list to match the engine's expected structure
+            new_rule.conditions_json = [{
+                'logic': form.cleaned_data['logic'],
+                'checks': checks
+            }]
+            # --- END SERIALIZATION ---
+
             new_rule.save()
             messages.success(request, f"Tax Rule '{new_rule.rule_name}' saved successfully.")
             return redirect('rule_list')
+
     else:
-        initial_data = {}
-        if not rule:
-            # 1. Generate the clean JSON string
-            json_string = json.dumps([
-                {"logic": "AND", "checks": [
-                    {"field": "description", "type": "CONTAINS_KEYWORD", "value": "Գործարքի Նկարագիր, Example Keyword"}
-                ]}
-            ], indent=2, ensure_ascii=False)
+        # --- DESERIALIZE JSON TO FORMSET (for GET request) ---
+        initial_form_data = {}
+        initial_formset_data = []
 
-            # 2. Assign the string to initial data (no trimming needed here, as it's not double-quoted yet)
-            initial_data['conditions_json'] = json_string
+        if rule:
+            # If editing an existing rule, parse its JSON
+            if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
+                logic_block = rule.conditions_json[0]
+                initial_form_data['logic'] = logic_block.get('logic', 'AND')
 
-        form = TaxRuleForm(instance=rule, initial=initial_data)
+                # Re-map the check structure to the formset structure
+                for check in logic_block.get('checks', []):
+                    initial_formset_data.append({
+                        'field': check.get('field'),
+                        'condition_type': check.get('type'),
+                        'value': check.get('value')
+                    })
 
-    context = {'form': form, 'title': title, 'rule': rule}
+        else:
+            # This is a new rule
+            initial_form_data['logic'] = 'AND'
+            # (formset will be blank, extra=1 handles it)
+
+        form = TaxRuleForm(instance=rule, initial=initial_form_data)
+        formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
+        # --- END DESERIALIZATION ---
+
+    context = {
+        'form': form,
+        'formset': formset, # Pass the formset to the template
+        'title': title,
+        'rule': rule
+    }
     return render(request, 'tax_processor/rule_form.html', context)
+
 
 @user_passes_test(is_superadmin)
 def rule_delete(request, rule_id):
@@ -424,7 +470,7 @@ def review_proposals(request):
         'proposals': proposals,
         'title': 'New Rule Proposals Awaiting Review'
     }
-    return render(request, 'tax_processor/review_proposals.html', context)
+    return render(request, 'tax_consumer/review_proposals.html', context)
 
 @user_passes_test(is_superadmin)
 def finalize_rule(request, unmatched_id):
@@ -463,12 +509,51 @@ def finalize_rule(request, unmatched_id):
 
     if request.method == 'POST':
         # Use the TaxRuleForm to validate and save the new rule
-        form = TaxRuleForm(request.POST, initial=initial_data)
-        if form.is_valid():
+        # Note: This part will also need to be updated if the finalize_rule
+        # view is to *also* use the new dynamic formset.
+        # For now, it still assumes the old TaxRuleForm with JSON textarea.
+
+        # --- IMPORTANT ---
+        # The code below STILL assumes TaxRuleForm takes 'conditions_json'
+        # If we want finalize_rule to use the new dynamic formset, this
+        # view must be updated just like rule_create_or_update was.
+
+        # --- TEMPORARY WORKAROUND (assuming old form for finalize_rule) ---
+        # We need to temporarily re-create a simple form for this view
+        # This is complex. Let's update this view properly.
+
+        # --- PROPER UPDATE FOR finalize_rule ---
+
+        # We can't use TaxRuleForm here easily because it no longer has conditions_json
+        # The *best* approach is to re-use the rule_create_or_update view
+
+        # --- SIMPLEST FIX: Re-create TaxRule with the dynamic formset ---
+
+        form = TaxRuleForm(request.POST, instance=None) # Create a NEW rule
+        formset = BaseConditionFormSet(request.POST, prefix='conditions') # Use the same prefix
+
+        if form.is_valid() and formset.is_valid():
             with db_transaction.atomic():
                 # 1. Create the new permanent TaxRule
                 new_rule = form.save(commit=False)
                 new_rule.created_by = request.user
+
+                # --- SERIALIZE FORMSET DATA TO JSON ---
+                checks = []
+                for check_form in formset.cleaned_data:
+                    if check_form and not check_form.get('DELETE'):
+                        checks.append({
+                            'field': check_form['field'],
+                            'type': check_form['condition_type'],
+                            'value': check_form['value']
+                        })
+
+                new_rule.conditions_json = [{
+                    'logic': form.cleaned_data['logic'],
+                    'checks': checks
+                }]
+                # --- END SERIALIZATION ---
+
                 new_rule.save()
 
                 # 2. Update the UnmatchedTransaction status to indicate completion
@@ -479,11 +564,32 @@ def finalize_rule(request, unmatched_id):
             return redirect('review_proposals')
 
     else:
-        # Pass initial data to the form
-        form = TaxRuleForm(initial=initial_data)
+        # --- DESERIALIZE for GET request ---
+        # We are pre-filling the formset from the proposal data
+
+        # 1. Build the initial data for the main form
+        initial_form_data = {
+            'rule_name': f"AUTO_RULE: {unmatched_item.pk} - {proposal_data.get('resolved_point_name', 'Unnamed')}",
+            'declaration_point': proposal_data.get('resolved_point_id'),
+            'priority': 50, # Set a medium priority default
+            'is_active': True,
+            'logic': 'AND' # Default to AND
+        }
+
+        # 2. Build the initial data for the formset
+        initial_formset_data = [{
+            'field': 'description',
+            'condition_type': 'CONTAINS_KEYWORD',
+            'value': proposal_data.get('sample_description', '')
+        }]
+
+        form = TaxRuleForm(initial=initial_form_data)
+        formset = BaseConditionFormSet(initial=initial_formset_data, prefix='conditions')
+        # --- END DESERIALIZATION ---
 
     context = {
         'form': form,
+        'formset': formset, # Pass the formset
         'unmatched_item': unmatched_item,
         'title': f"Finalize Rule Proposal #{unmatched_id}",
         'proposal_notes': proposal_data.get('notes')
