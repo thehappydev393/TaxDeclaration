@@ -103,7 +103,7 @@ class ConditionForm(forms.Form):
 # Create a FormSet factory from the new ConditionForm
 # extra=1 shows one blank form by default.
 # can_delete=True adds a checkbox for deleting rows.
-BaseConditionFormSet = formset_factory(ConditionForm, extra=1, can_delete=True)
+BaseConditionFormSet = formset_factory(ConditionForm, extra=0, can_delete=True)
 
 
 # -----------------------------------------------------------

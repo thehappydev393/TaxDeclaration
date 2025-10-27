@@ -1,5 +1,4 @@
 {% load static %}
-{% load json_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -38,6 +37,19 @@
             padding-bottom: 5px;
         }
 
+        /* --- Transaction Detail Box --- */
+        .detail-box {
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        .detail-box p { margin: 5px 0; font-size: 0.95em; }
+        .detail-box strong { color: #343a40; }
+        .detail-box em { color: #dc3545; font-style: normal; font-weight: bold; }
+        /* --- END Detail Box --- */
+
         /* Proposal Detail Box */
         .proposal-detail-box {
             border: 1px solid #ffc107; /* Yellow for review status */
@@ -49,45 +61,66 @@
         .proposal-detail-box p { margin: 5px 0; font-size: 0.95em; }
         .proposal-detail-box strong { color: #856404; }
 
-        /* Form Styling */
-        form p { margin-bottom: 20px; }
+        /* Form Layout */
+        .field-group { margin-bottom: 25px; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px; }
         label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
         input[type="text"], input[type="number"], select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ced4da;
             border-radius: 4px;
-            box-sizing: border-box;
+            box-sizing: border-box; /* Important for 100% width */
         }
+        small { display: block; color: #6c757d; margin-top: 5px; }
+        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; }
 
-        /* JSON Textarea Styling (Crucial for readability) */
-        textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-family: Consolas, monospace;
-            font-size: 0.9em;
-            min-height: 250px;
+        /* Dynamic Formset Styling */
+        .conditions-section {
+            margin-top: 30px;
+            padding: 20px;
             background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .conditions-section h2 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; }
+
+        .condition-form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr auto;
+            gap: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #fff;
+            align-items: flex-start;
+        }
+        .condition-form-row label {
+            font-size: 0.85em;
+            margin-bottom: 3px;
         }
 
         /* Button Styling */
-        .button-group { margin-top: 25px; }
-        .approve-btn {
-            padding: 12px 25px;
-            background-color: #28a745; /* Green for success/approval */
-            color: white;
+        .btn {
+            padding: 10px 15px;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-size: 1.1em;
             font-weight: bold;
-            transition: background-color 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        .approve-btn {
+            padding: 12px 25px;
+            background-color: #28a745;
+            color: white;
+            font-size: 1.1em;
         }
         .approve-btn:hover { background-color: #1e7e34; }
         .cancel-link { color: #dc3545; margin-left: 15px; text-decoration: none; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
     </style>
 </head>
 <body>
@@ -95,9 +128,17 @@
     <h1>{{ title }}</h1>
     <p>Խնդրում ենք վերանայել օգտատիրոջ կողմից առաջարկված կանոնը և հաստատել նախքան մշտական պահպանելը։</p>
 
+    <h2>Գործարքի Մանրամասները</h2>
+    <div class="detail-box">
+        <p><strong>Ամսաթիվ:</strong> {{ transaction.transaction_date|date:"Y-m-d H:i" }}</p>
+        <p><strong>Գումար:</strong> <em style="color: #007bff;">{{ transaction.amount }} {{ transaction.currency }}</em></p>
+        <p><strong>Ուղարկող:</strong> {{ transaction.sender }} (Հաշիվ: {{ transaction.sender_account|default:"N/A" }})</p>
+        <p><strong>Նկարագրություն:</strong> <em>{{ transaction.description }}</em></p>
+        <p><small>Պատկանում է Հայտարարագրին: {{ transaction.statement.declaration.name }}</small></p>
+    </div>
     <h2>Առաջարկի Մանրամասները</h2>
     <div class="proposal-detail-box">
-        <p><strong>Առաջարկվող Կատեգորիա:</strong> <code>{{ form.initial.rule_name|default:"N/A" }}</code></p>
+        <p><strong>Առաջարկվող Կատեգորիա:</strong> <code>{{ proposed_category_name }}</code></p>
         <p><strong>Օգտատիրոջ Նշումներ:</strong> <em>{{ proposal_notes|default:"(Նշումներ չեն տրամադրվել)" }}</em></p>
     </div>
 
@@ -106,28 +147,103 @@
     <form method="post">
         {% csrf_token %}
 
-        {% for field in form %}
-        <div style="margin-bottom: 15px;">
-            <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
-
-            {% if field.name == 'conditions_json' %}
-            <textarea name="{{ field.name }}" id="{{ field.id_for_label }}"
-                      rows="15" cols="80">{{ field.value|json_unformat }}</textarea>
-            {% else %}
-            {{ field }}
-            {% endif %}
-
-            {% if field.help_text %}
-            <small style="display: block; color: gray;">{{ field.help_text }}</small>
-            {% endif %}
-            {% for error in field.errors %}
-            <p style="color: red;">{{ error }}</p>
-            {% endfor %}
+        {% if form.non_field_errors or formset.non_field_errors %}
+        <div style="color: red; padding: 10px; border: 1px solid red; margin-bottom: 15px;">
+            {{ form.non_field_errors }}
+            {{ formset.non_field_errors }}
         </div>
+        {% endif %}
+
+        {% for error in formset.non_field_errors %}
+        <p style="color: red;">{{ error }}</p>
         {% endfor %}
 
-        <div class="button-group">
-            <button type="submit" class="approve-btn">
+
+        <div class="field-group">
+            {% for field in form %}
+            <div style="margin-bottom: 15px;">
+                <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+                {{ field }}
+                {% if field.help_text %}
+                <small>{{ field.help_text }}</small>
+                {% endif %}
+                {% for error in field.errors %}
+                <p class="errorlist">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="conditions-section">
+            <h2>Կանոնի Պայմաններ (Conditions)</h2>
+
+            {{ formset.management_form }}
+            <div id="condition-form-list">
+                {% for form in formset %}
+                <div class="condition-form-row">
+                    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+
+                    <div>
+                        {{ form.field.label_tag }}
+                        {{ form.field }}
+                        {% for error in form.field.errors %}
+                        <p class="errorlist">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ form.condition_type.label_tag }}
+                        {{ form.condition_type }}
+                        {% for error in form.condition_type.errors %}
+                        <p class="errorlist">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ form.value.label_tag }}
+                        {{ form.value }}
+                        {% for error in form.value.errors %}
+                        <p class="errorlist">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    <div style="align-self: flex-end;">
+                        {% if formset.can_delete %}
+                        <div style="display: none;">{{ form.DELETE }}</div>
+                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div id="empty-form-template" style="display: none;">
+                <div class="condition-form-row">
+                    {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+                    <div>
+                        {{ formset.empty_form.field.label_tag }}
+                        {{ formset.empty_form.field }}
+                    </div>
+                    <div>
+                        {{ formset.empty_form.condition_type.label_tag }}
+                        {{ formset.empty_form.condition_type }}
+                    </div>
+                    <div>
+                        {{ formset.empty_form.value.label_tag }}
+                        {{ formset.empty_form.value }}
+                    </div>
+                    <div style="align-self: flex-end;">
+                        {% if formset.can_delete %}
+                        <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
+                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button>
+        </div>
+
+
+        <div class="button-group" style="margin-top: 25px;">
+            <button type="submit" class="btn approve-btn">
                 Հաստատել և Ստեղծել Մշտական Կանոն
             </button>
             <a href="{% url 'review_proposals' %}" class="cancel-link">Չեղարկել և Մերժել Առաջարկը</a>
@@ -138,5 +254,50 @@
         Հաստատելուց հետո այս գործարքը կմաքրվի վերանայման հերթից, իսկ կանոնը կսկսի ավտոմատ կիրառվել։
     </p>
 </div>
+
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const formList = document.getElementById('condition-form-list');
+        const addBtn = document.getElementById('add-condition-btn');
+        const emptyFormTemplate = document.getElementById('empty-form-template').innerHTML;
+        const totalFormsInput = document.querySelector('input[name="conditions-TOTAL_FORMS"]');
+        const formPrefix = 'conditions'; // Must match the prefix in the view
+
+        addBtn.addEventListener('click', function() {
+            // Get the current number of forms
+            let currentFormCount = parseInt(totalFormsInput.value, 10);
+
+            // Create new form HTML, replacing the prefix placeholder
+            let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
+
+            // Append to the list
+            let tempDiv = document.createElement('div');
+            tempDiv.innerHTML = newFormHtml;
+            formList.appendChild(tempDiv.firstElementChild);
+
+            // Increment the total forms count
+            totalFormsInput.value = currentFormCount + 1;
+        });
+
+        // Event delegation for remove buttons
+        formList.addEventListener('click', function(e) {
+            if (e.target && e.target.classList.contains('btn-remove')) {
+                // Find the parent row
+                let row = e.target.closest('.condition-form-row');
+
+                // Find the DELETE checkbox within this row and check it
+                let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+                if (deleteCheckbox) {
+                    deleteCheckbox.checked = true;
+                }
+
+                // Hide the row
+                row.style.display = 'none';
+            }
+        });
+    });
+</script>
+
 </body>
 </html>

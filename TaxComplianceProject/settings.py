@@ -43,6 +43,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -125,17 +126,14 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-# 1. CRITICAL FIX: Ensure STATIC_URL is defined.
 STATIC_URL = '/static/'
-
-# 2. Ensure STATIC_ROOT is defined (used by collectstatic)
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_collected')
-
-# 2. Directories where Django looks for source files
 STATICFILES_DIRS = [
-    # 1. Project-level static files
-#     os.path.join(BASE_DIR, 'static'),
+    # os.path.join(BASE_DIR, 'static'),
 ]
+
+# --- ADD THIS LINE FOR WHITENOISE ---
+STATIC_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # -------------------------------------------------------------
 # CRITICAL FIX: Dynamically find the absolute path to Admin static files
 # using the finders framework, which resolves cross-platform differences.

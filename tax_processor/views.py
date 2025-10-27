@@ -488,7 +488,7 @@ def review_proposals(request):
         'proposals': proposals,
         'title': 'New Rule Proposals Awaiting Review'
     }
-    return render(request, 'tax_consumer/review_proposals.html', context)
+    return render(request, 'tax_processor/review_proposals.html', context)
 
 @user_passes_test(is_superadmin)
 def finalize_rule(request, unmatched_id):
@@ -497,56 +497,16 @@ def finalize_rule(request, unmatched_id):
     """
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
 
+    # --- ADDED THIS LINE ---
+    transaction = unmatched_item.transaction # Get the transaction object
+
     if unmatched_item.status != 'NEW_RULE_PROPOSED':
         messages.error(request, "This item is not a pending rule proposal.")
         return redirect('review_proposals')
 
     proposal_data = unmatched_item.rule_proposal_json
 
-    # 1. Start with the boilerplate description provided by the user's notes
-    sample_desc = proposal_data.get('sample_description', 'No description provided').replace('"', '\\"')
-
-    # 1. Build the structured rule logic dynamically
-    structured_conditions = [
-        {"logic": "AND", "checks": [
-            {"field": "description", "type": "CONTAINS_KEYWORD", "value": f"{sample_desc}"}
-        ]}
-    ]
-
-    # 3. Format the JSON string for the Textarea widget (using indent=2 and avoiding escapes)
-    formatted_json = json.dumps(structured_conditions, indent=2, ensure_ascii=False)
-
-    # Pre-populate the TaxRuleForm with data from the user's resolution
-    initial_data = {
-        'rule_name': f"AUTO_RULE: {unmatched_item.pk} - {proposal_data.get('resolved_point_name', 'Unnamed')}",
-        'declaration_point': proposal_data.get('resolved_point_id'),
-        'priority': 50, # Set a medium priority default
-        'is_active': True,
-        'conditions_json': formatted_json,
-    }
-
     if request.method == 'POST':
-        # Use the TaxRuleForm to validate and save the new rule
-        # Note: This part will also need to be updated if the finalize_rule
-        # view is to *also* use the new dynamic formset.
-        # For now, it still assumes the old TaxRuleForm with JSON textarea.
-
-        # --- IMPORTANT ---
-        # The code below STILL assumes TaxRuleForm takes 'conditions_json'
-        # If we want finalize_rule to use the new dynamic formset, this
-        # view must be updated just like rule_create_or_update was.
-
-        # --- TEMPORARY WORKAROUND (assuming old form for finalize_rule) ---
-        # We need to temporarily re-create a simple form for this view
-        # This is complex. Let's update this view properly.
-
-        # --- PROPER UPDATE FOR finalize_rule ---
-
-        # We can't use TaxRuleForm here easily because it no longer has conditions_json
-        # The *best* approach is to re-use the rule_create_or_update view
-
-        # --- SIMPLEST FIX: Re-create TaxRule with the dynamic formset ---
-
         form = TaxRuleForm(request.POST, instance=None) # Create a NEW rule
         formset = BaseConditionFormSet(request.POST, prefix='conditions') # Use the same prefix
 
@@ -581,9 +541,12 @@ def finalize_rule(request, unmatched_id):
             messages.success(request, f"New Rule '{new_rule.rule_name}' created and proposal cleared.")
             return redirect('review_proposals')
 
+        # --- ADDED THIS to repopulate context on POST failure ---
+        else:
+            proposed_category_name = proposal_data.get('resolved_point_name', 'N/A')
+
     else:
         # --- DESERIALIZE for GET request ---
-        # We are pre-filling the formset from the proposal data
 
         # 1. Build the initial data for the main form
         initial_form_data = {
@@ -603,13 +566,18 @@ def finalize_rule(request, unmatched_id):
 
         form = TaxRuleForm(initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix='conditions')
+
+        # --- ADDED THIS for GET request ---
+        proposed_category_name = proposal_data.get('resolved_point_name', 'N/A')
         # --- END DESERIALIZATION ---
 
     context = {
         'form': form,
-        'formset': formset, # Pass the formset
+        'formset': formset,
         'unmatched_item': unmatched_item,
+        'transaction': transaction, # <-- ADDED
         'title': f"Finalize Rule Proposal #{unmatched_id}",
-        'proposal_notes': proposal_data.get('notes')
+        'proposal_notes': proposal_data.get('notes'),
+        'proposed_category_name': proposed_category_name, # <-- ADDED
     }
     return render(request, 'tax_processor/finalize_rule.html', context)
