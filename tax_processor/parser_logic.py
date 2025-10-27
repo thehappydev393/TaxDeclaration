@@ -358,7 +358,7 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
         # PRIORITY 3: Single Amount/Sign Column (Fallback/Other)
         'single_amount_sign': ['գործարքիգումարքարտիարժույթով', 'գործարքիգումարհաշվիարժույթով', 'amount', 'գործարքիգումարը'],
 
-        'sender': ['շահառուվճարող', 'շահառու', 'վճարող', 'sendername'],
+        'sender': ['շահառուվճարող', 'շահառու', 'վճարող', 'sendername', 'թղթակից'],
         'sender_account': ['շահառույիվճարողիհաշիվ', 'հաշիվ', 'accountnumber'],
         'currency_col': ['արժույթ', 'currency', 'քարտիարժույթով', 'հաշվիարժույթով']
     }
