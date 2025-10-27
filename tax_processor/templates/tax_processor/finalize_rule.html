@@ -118,7 +118,32 @@
             font-size: 1.1em;
         }
         .approve-btn:hover { background-color: #1e7e34; }
-        .cancel-link { color: #dc3545; margin-left: 15px; text-decoration: none; }
+
+        /* --- UPDATED BUTTON STYLES --- */
+        .reject-btn {
+            padding: 10px 15px; /* Made slightly smaller than approve */
+            background-color: #dc3545; /* Red */
+            color: white;
+            font-size: 1.0em;
+        }
+        .reject-btn:hover { background-color: #c82333; }
+
+        .cancel-link {
+            color: #6c757d;
+            margin-left: 15px;
+            text-decoration: none;
+            font-size: 1.0em;
+            vertical-align: middle;
+        }
+        .button-group-secondary {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            align-items: center;
+        }
+        /* --- END UPDATED STYLES --- */
+
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
     </style>
@@ -244,20 +269,42 @@
 
         <div class="button-group" style="margin-top: 25px;">
             <button type="submit" class="btn approve-btn">
-                Հաստատել և Ստեղծել Մշտական Կանոն
+                Հաստատել
             </button>
-            <a href="{% url 'review_proposals' %}" class="cancel-link">Չեղարկել և Մերժել Առաջարկը</a>
         </div>
     </form>
+    <div class="button-group-secondary">
+        <form id="reject-form" method="post" action="{% url 'reject_proposal' unmatched_item.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn reject-btn">
+                Մերժել Առաջարկը
+            </button>
+        </form>
 
+        <a href="{% url 'review_proposals' %}" class="cancel-link">Չեղարկել</a>
+    </div>
     <p style="margin-top: 40px; color: #6c757d; font-size: 0.9em;">
         Հաստատելուց հետո այս գործարքը կմաքրվի վերանայման հերթից, իսկ կանոնը կսկսի ավտոմատ կիրառվել։
-    </p>
+        </sCRIPT>
 </div>
 
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+
+        // --- SCRIPT FOR REJECT CONFIRMATION ---
+        const rejectForm = document.getElementById('reject-form');
+        if (rejectForm) {
+            rejectForm.addEventListener('submit', function(e) {
+                if (!confirm('Համոզվա՞ծ եք, որ ցանկանում եք մերժել այս առաջարկը։ Գործարքը կվերադառնա «Սպասում է Վերանայման» հերթին։')) {
+                    e.preventDefault(); // Stop the form from submitting
+                }
+            });
+        }
+        // --- END REJECT SCRIPT ---
+
+
+        // --- SCRIPT FOR DYNAMIC FORMSET ---
         const formList = document.getElementById('condition-form-list');
         const addBtn = document.getElementById('add-condition-btn');
         const emptyFormTemplate = document.getElementById('empty-form-template').innerHTML;
@@ -296,6 +343,7 @@
                 row.style.display = 'none';
             }
         });
+        // --- END FORMSET SCRIPT ---
     });
 </script>
 

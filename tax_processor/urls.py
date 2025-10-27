@@ -33,4 +33,5 @@ urlpatterns = [
     # Proposal Review Paths (NEW)
     path('rules/proposals/', views.review_proposals, name='review_proposals'),
     path('rules/proposals/<int:unmatched_id>/finalize/', views.finalize_rule, name='finalize_rule'),
+    path('rules/proposals/reject/<int:unmatched_id>/', views.reject_proposal, name='reject_proposal'),
 ]

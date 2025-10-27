@@ -13,6 +13,7 @@ from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction, Use
 from datetime import date
 import json
 from django.db import transaction as db_transaction
+from django.views.decorators.http import require_POST
 
 # -----------------------------------------------------------
 # 1. PERMISSION HELPERS
@@ -246,7 +247,6 @@ def rule_create_or_update(request, rule_id=None):
         else:
             # This is a new rule
             initial_form_data['logic'] = 'AND'
-            # (formset will be blank, extra=1 handles it)
 
         form = TaxRuleForm(instance=rule, initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
@@ -581,3 +581,26 @@ def finalize_rule(request, unmatched_id):
         'proposed_category_name': proposed_category_name, # <-- ADDED
     }
     return render(request, 'tax_processor/finalize_rule.html', context)
+
+# ---
+# --- NEW VIEW ADDED AT THE END OF THE FILE ---
+# ---
+@require_POST # Ensures this view can only be accessed via POST
+@user_passes_test(is_superadmin) # Must be superadmin
+def reject_proposal(request, unmatched_id):
+    """
+    Rejects a rule proposal, clearing the proposal JSON and setting
+    the status back to PENDING_REVIEW for regular resolution.
+    """
+    unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
+
+    if unmatched_item.status == 'NEW_RULE_PROPOSED':
+        # Clear the proposal and send it back to the pending queue
+        unmatched_item.status = 'PENDING_REVIEW'
+        unmatched_item.rule_proposal_json = None
+        unmatched_item.save()
+        messages.warning(request, f"Proposal #{unmatched_id} rejected. The transaction has been returned to the 'Pending Review' queue.")
+    else:
+        messages.error(request, "This proposal could not be rejected (it may have already been processed).")
+
+    return redirect('review_proposals')
