@@ -489,7 +489,8 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
         description_data.replace('nan', '', inplace=True)
         universal_df['Description'] = description_data.apply(
             lambda row: ' '.join(row.values).strip(), axis=1
-        ).str.replace(r'\s{2,}', ' ', regex=True)
+        ).str.replace('_x000D_', ' ', regex=False) \
+         .str.replace(r'\s{2,}', ' ', regex=True)
 
     else:
         universal_df['Description'] = create_placeholder()
