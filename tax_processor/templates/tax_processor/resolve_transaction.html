@@ -1,13 +1,16 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="hy"> {# Changed lang to hy for Armenian #}
+<html lang="hy">
 <head>
     <meta charset="UTF-8">
     <title>Լուծել Գործարքը</title> {# Resolve Transaction #}
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
-        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
+        .container { max-width: 900px; /* Increased width */ margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1, h2, h3 { color: #007bff; margin-top: 0; }
+        h1 { font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-bottom: 25px; }
+        h2 { font-size: 1.4em; color: #495057; margin-top: 25px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        h3 { font-size: 1.2em; color: #343a40; margin-top: 20px; }
 
         /* Transaction Detail Box */
         .detail-box { border: 1px solid #dee2e6; padding: 15px; margin-bottom: 30px; border-radius: 4px; background-color: #f8f9fa; }
@@ -16,29 +19,35 @@
         .detail-box em { color: #dc3545; font-style: normal; font-weight: bold; }
 
         /* Form Styling */
-        form p, form div.form-field { margin-bottom: 20px; } /* Added div.form-field */
+        form p, form div.form-field { margin-bottom: 20px; }
         label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
-        select, textarea, input[type="text"], input[type="number"] { /* Added input types */
-            width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; transition: border-color 0.2s;
-        }
+        select, textarea, input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; transition: border-color 0.2s; }
         textarea { resize: vertical; }
-        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;} /* Added errorlist style */
-        small { display: block; color: #6c757d; margin-top: 5px; } /* Added help text style */
+        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
+        small { display: block; color: #6c757d; margin-top: 5px; }
 
+        /* Radio Select Styling */
+        .radio-select label { display: inline-block; margin-right: 15px; margin-left: 5px; font-weight: normal; }
+        .radio-select input[type="radio"] { margin-right: 5px; }
 
-        /* Rule Creation Section */
-        #rule-creation-section {
-            border-top: 1px dashed #ced4da;
-            padding-top: 20px;
-            margin-top: 20px;
-        }
-        /* Style to hide the rule fields initially */
-        #rule-fields {
+        /* Conditional Sections Styling */
+        #rule-creation-form-section, #proposal-notes-section {
             display: none; /* Hidden by default */
-            padding-left: 20px;
-            border-left: 3px solid #007bff;
-            margin-top: 15px;
+            border-top: 1px dashed #ccc;
+            margin-top: 25px;
+            padding-top: 20px;
         }
+
+        /* --- Rule Form Specific Styles (copied from rule_form.html) --- */
+        .field-group { margin-bottom: 25px; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px; background-color: #fdfdfd; } /* Slightly different background */
+        .conditions-section { margin-top: 30px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; }
+        .conditions-section h3 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; } /* Use h3 here */
+        .condition-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; align-items: flex-start; }
+        .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
+        .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; text-align: center; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        /* --- End Rule Form Styles --- */
 
 
         /* Button Styling */
@@ -50,106 +59,193 @@
 </head>
 <body>
 <div class="container">
-    <h1>Լուծել Գործարքը (#{{ unmatched_item.pk }})</h1> {# Resolve Transaction #}
+    <h1>Լուծել Գործարքը (#{{ unmatched_item.pk }})</h1>
 
-    {% if form.non_field_errors %}
+    {% if resolution_form.non_field_errors or rule_form.non_field_errors or condition_formset.non_field_errors %}
     <div style="color: red; padding: 10px; border: 1px solid red; margin-bottom: 15px;">
+        <h4>Խնդրում ենք ուղղել ստորև նշված սխալները:</h4> {# Please correct the errors below #}
         <ul style="margin: 0; padding-left: 20px;">
-            {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            {% for error in resolution_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            {% for error in rule_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            {% for error in condition_formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
+            {# Display field-specific errors near fields #}
         </ul>
     </div>
     {% endif %}
 
 
-    <h2>Գործարքի Մանրամասները</h2> {# Transaction Details #}
+    <h2>Գործարքի Մանրամասները</h2>
     <div class="detail-box">
-        <p><strong>Ամսաթիվ։</strong> {{ transaction.transaction_date|date:"Y-m-d H:i" }}</p> {# Date #}
-        <p><strong>Գումար։</strong> <em style="color: #007bff;">{{ transaction.amount }} {{ transaction.currency }}</em></p> {# Amount #}
-        <p><strong>Ուղարկող։</strong> {{ transaction.sender }} (Հաշիվ։ {{ transaction.sender_account|default:"N/A" }})</p> {# Sender (Account) #}
-        <p><strong>Նկարագրություն։</strong> <em>{{ transaction.description }}</em></p> {# Description #}
-        <p><small>Պատկանում է Հայտարարագրին։ {{ transaction.statement.declaration.name }}</small></p> {# Belongs to Declaration #}
+        <p><strong>Ամսաթիվ։</strong> {{ transaction.transaction_date|date:"Y-m-d H:i" }}</p>
+        <p><strong>Գումար։</strong> <em style="color: #007bff;">{{ transaction.amount }} {{ transaction.currency }}</em></p>
+        <p><strong>Ուղարկող։</strong> {{ transaction.sender }} (Հաշիվ։ {{ transaction.sender_account|default:"N/A" }})</p>
+        <p><strong>Նկարագրություն։</strong> <em>{{ transaction.description }}</em></p>
+        <p><small>Պատկանում է Հայտարարագրին։ {{ transaction.statement.declaration.name }}</small></p>
     </div>
 
-    <h2>Լուծում</h2> {# Resolution #}
+    <h2>Լուծում</h2>
     <form method="post">
         {% csrf_token %}
+        {{ resolution_form.unmatched_id }} {# Hidden field for resolution form #}
 
+        {# --- Resolution Form Fields --- #}
         <div class="form-field">
-            {{ form.resolved_point.label_tag }}
-            {{ form.resolved_point }}
-            <small>{{ form.resolved_point.help_text }}</small>
-            {% for error in form.resolved_point.errors %}
+            {{ resolution_form.resolved_point.label_tag }}
+            {{ resolution_form.resolved_point }}
+            <small>{{ resolution_form.resolved_point.help_text }}</small>
+            {% for error in resolution_form.resolved_point.errors %}
             <p class="errorlist">{{ error }}</p>
             {% endfor %}
         </div>
 
-        <div id="rule-creation-section">
-            <h3>Հատուկ Կանոնի Ստեղծում</h3> {# Specific Rule Creation #}
-            <div class="form-field" style="display: flex; align-items: center;">
-                {{ form.create_specific_rule }}
-                <label for="{{ form.create_specific_rule.id_for_label }}" style="margin-bottom: 0; margin-left: 10px;">{{ form.create_specific_rule.label }}</label>
+        <div class="form-field">
+            {{ resolution_form.rule_action.label_tag }}
+            <div class="radio-select">
+                {% for radio in resolution_form.rule_action %}
+                {{ radio.tag }} <label for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                {% endfor %}
             </div>
-            <small style="margin-left: 30px;">{{ form.create_specific_rule.help_text }}</small>
-            {% for error in form.create_specific_rule.errors %}
-            <p class="errorlist" style="margin-left: 30px;">{{ error }}</p>
+            <small>{{ resolution_form.rule_action.help_text }}</small>
+            {% for error in resolution_form.rule_action.errors %}
+            <p class="errorlist">{{ error }}</p>
             {% endfor %}
+        </div>
 
+        {# --- Conditional Section: Propose Global Notes --- #}
+        <div id="proposal-notes-section" class="form-field">
+            {{ resolution_form.rule_notes.label_tag }}
+            {{ resolution_form.rule_notes }}
+            <small>{{ resolution_form.rule_notes.help_text }}</small>
+            {% for error in resolution_form.rule_notes.errors %}
+            <p class="errorlist">{{ error }}</p>
+            {% endfor %}
+        </div>
 
-            <div id="rule-fields"> {# Div containing fields to show/hide #}
+        {# --- Conditional Section: Create Specific Rule Form --- #}
+        <div id="rule-creation-form-section">
+            <h3>Նոր Հատուկ Կանոնի Մանրամասներ</h3> {# New Specific Rule Details #}
+
+            {# Render TaxRuleForm fields #}
+            <div class="field-group">
+                {% for field in rule_form %}
                 <div class="form-field">
-                    {{ form.rule_name.label_tag }}
-                    {{ form.rule_name }}
-                    <small>{{ form.rule_name.help_text }}</small>
-                    {% for error in form.rule_name.errors %}
-                    <p class="errorlist">{{ error }}</p>
+                    <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
+                    {{ field }}
+                    {% if field.help_text %} <small>{{ field.help_text }}</small> {% endif %}
+                    {% for error in field.errors %} <p class="errorlist">{{ error }}</p> {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {# Render ConditionFormSet #}
+            <div class="conditions-section">
+                <h3>Կանոնի Պայմաններ</h3> {# Rule Conditions #}
+                {{ condition_formset.management_form }}
+                {% if condition_formset.non_form_errors %}
+                <div style="color: red;">
+                    {% for error in condition_formset.non_form_errors %} <p>{{ error }}</p> {% endfor %}
+                </div>
+                {% endif %}
+                <div id="condition-form-list">
+                    {% for form in condition_formset %}
+                    <div class="condition-form-row">
+                        {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                        <div>{{ form.field.label_tag }} {{ form.field }} {% for error in form.field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
+                        <div>{{ form.condition_type.label_tag }} {{ form.condition_type }} {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
+                        <div>{{ form.value.label_tag }} {{ form.value }} {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
+                        <div style="align-self: flex-end;">{% if condition_formset.can_delete %}<div style="display: none;">{{ form.DELETE }}</div><button type="button" class="btn btn-danger btn-remove">Ջնջել</button>{% endif %}</div>
+                        {% if form.non_field_errors %}
+                        <div style="grid-column: 1 / -1; color: red;">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
+                        {% endif %}
+                    </div>
                     {% endfor %}
                 </div>
-
-                <div class="form-field">
-                    {{ form.priority.label_tag }}
-                    {{ form.priority }}
-                    <small>{{ form.priority.help_text }}</small>
-                    {% for error in form.priority.errors %}
-                    <p class="errorlist">{{ error }}</p>
-                    {% endfor %}
+                {# Template for new forms #}
+                <div id="empty-form-template" style="display: none;">
+                    <div class="condition-form-row">
+                        {% for hidden in condition_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+                        <div>{{ condition_formset.empty_form.field.label_tag }} {{ condition_formset.empty_form.field }}</div>
+                        <div>{{ condition_formset.empty_form.condition_type.label_tag }} {{ condition_formset.empty_form.condition_type }}</div>
+                        <div>{{ condition_formset.empty_form.value.label_tag }} {{ condition_formset.empty_form.value }}</div>
+                        <div style="align-self: flex-end;">{% if condition_formset.can_delete %}<div style="display: none;">{{ condition_formset.empty_form.DELETE }}</div><button type="button" class="btn btn-danger btn-remove">Ջնջել</button>{% endif %}</div>
+                    </div>
                 </div>
+                <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button>
             </div>
         </div>
 
-        {{ form.unmatched_id }} {# Hidden field #}
-
+        {# --- Submit Button --- #}
         <div class="button-group">
             <button type="submit" class="save-btn">Պահպանել Լուծումը</button> {# Save Resolution #}
-            {# Decide where cancel should go - back to review queue or declaration detail? #}
             <a href="{% url 'review_queue_declaration' declaration_id=transaction.statement.declaration.id %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
-            {# <a href="{% url 'review_queue' %}" class="cancel-link">Չեղարկել</a> #}
         </div>
     </form>
 
     <script>
-        // JavaScript to show/hide rule fields based on checkbox state
         document.addEventListener('DOMContentLoaded', function() {
-            const checkbox = document.getElementById('{{ form.create_specific_rule.id_for_label }}'); // Use Django's ID
-            const ruleFieldsDiv = document.getElementById('rule-fields');
-            const ruleNameInput = document.getElementById('{{ form.rule_name.id_for_label }}');
-            const priorityInput = document.getElementById('{{ form.priority.id_for_label }}');
+            const ruleActionRadios = document.querySelectorAll('input[name="{{ resolution_form.rule_action.html_name }}"]'); // Get radio buttons by name
+            const ruleCreationSection = document.getElementById('rule-creation-form-section');
+            const proposalNotesSection = document.getElementById('proposal-notes-section');
 
-            function toggleRuleFields() {
-                if (checkbox.checked) {
-                    ruleFieldsDiv.style.display = 'block';
-                    // Make fields required via JS (optional, view handles validation too)
-                    // ruleNameInput.required = true;
-                    // priorityInput.required = true;
-                } else {
-                    ruleFieldsDiv.style.display = 'none';
-                    // Make fields not required
-                    // ruleNameInput.required = false;
-                    // priorityInput.required = false;
+            function toggleSections() {
+                let selectedAction = 'resolve_only'; // Default
+                ruleActionRadios.forEach(radio => {
+                    if (radio.checked) {
+                        selectedAction = radio.value;
+                    }
+                });
+
+                if (selectedAction === 'create_specific') {
+                    ruleCreationSection.style.display = 'block';
+                    proposalNotesSection.style.display = 'none';
+                } else if (selectedAction === 'propose_global') {
+                    ruleCreationSection.style.display = 'none';
+                    proposalNotesSection.style.display = 'block';
+                } else { // resolve_only
+                    ruleCreationSection.style.display = 'none';
+                    proposalNotesSection.style.display = 'none';
                 }
             }
 
-            checkbox.addEventListener('change', toggleRuleFields);
-            toggleRuleFields(); // Initial call to set state on page load
+            ruleActionRadios.forEach(radio => {
+                radio.addEventListener('change', toggleSections);
+            });
+
+            toggleSections(); // Initial call
+
+            // --- JavaScript for dynamic formset (within rule creation section) ---
+            const formList = document.getElementById('condition-form-list');
+            const addBtn = document.getElementById('add-condition-btn');
+            // Ensure emptyFormTemplate exists before trying to access innerHTML
+            const emptyFormTemplateDiv = document.getElementById('empty-form-template');
+            const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
+            const totalFormsInput = document.querySelector('input[name="{{ condition_formset.prefix }}-TOTAL_FORMS"]'); // Use prefix
+            const formPrefix = '{{ condition_formset.prefix }}'; // Use prefix from view
+
+            if (addBtn && emptyFormTemplate && totalFormsInput) { // Check if elements exist
+                addBtn.addEventListener('click', function() {
+                    let currentFormCount = parseInt(totalFormsInput.value, 10);
+                    let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
+                    let tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = newFormHtml;
+                    // Append the actual form row, not the wrapping div
+                    if (tempDiv.firstElementChild) {
+                        formList.appendChild(tempDiv.firstElementChild);
+                        totalFormsInput.value = currentFormCount + 1;
+                    }
+                });
+
+                formList.addEventListener('click', function(e) {
+                    if (e.target && e.target.classList.contains('btn-remove')) {
+                        let row = e.target.closest('.condition-form-row');
+                        let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+                        if (deleteCheckbox) { deleteCheckbox.checked = true; }
+                        row.style.display = 'none';
+                    }
+                });
+            } else {
+                console.error("Formset JS elements not found. Check prefixes and IDs.");
+            }
         });
     </script>
 </div>
