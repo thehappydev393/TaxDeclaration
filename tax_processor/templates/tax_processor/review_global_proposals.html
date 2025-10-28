@@ -1,0 +1,89 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="hy"> {# Changed lang to hy for Armenian #}
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        /* (Use styles similar to review_proposals.html or rule_list.html) */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
+
+        /* Table Styling */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; font-size: 0.95em; }
+        th { background-color: #343a40; color: white; font-weight: 600; }
+        tr:hover { background-color: #f8f9fa; }
+
+        /* Proposal Specific Styling */
+        .proposal-row { background-color: #fff8e1; border-left: 5px solid #ffc107; }
+        .action-links button { border: none; background: none; cursor: pointer; padding: 5px 10px; border-radius: 4px; font-weight: bold; margin-right: 8px; font-size: 0.9em; } /* Adjusted font size */
+        .approve-btn { background-color: #28a745; color: white; }
+        .reject-btn { background-color: #dc3545; color: white; }
+        .edit-link { color: #007bff; text-decoration: none; font-size: 0.9em; } /* Adjusted font size */
+        .nav-links { margin-bottom: 20px; }
+        .details-small { font-size: 0.85em; color: #6c757d; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>{{ title }}</h1>
+
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="nav-links">
+        <a href="{% url 'user_dashboard' %}" style="color: #007bff;">← Վերադառնալ Գլխավոր Էջ</a> {# Back to Dashboard #}
+    </div>
+
+    {% if proposals %}
+    <table>
+        <thead>
+        <tr>
+            <th>Կանոնի ID</th> {# Rule ID #}
+            <th>Առաջարկվող Անուն</th> {# Proposed Name #}
+            <th>Սկզբնական Հայտարարագիր</th> {# Original Declaration #}
+            <th>Նպատակային Կետ</th> {# Target Point #}
+            <th>Առաջնահերթ.</th> {# Priority #}
+            <th>Առաջարկող</th> {# Proposed By #}
+            <th>Գործողություններ</th> {# Actions #}
+        </tr>
+        </thead>
+        <tbody>
+        {% for rule in proposals %}
+        <tr class="proposal-row">
+            <td>#{{ rule.pk }}</td>
+            <td>
+                {{ rule.rule_name }}
+                <br><a href="{% url 'declaration_rule_update' rule.declaration.id rule.id %}" class="edit-link" title="Դիտել/Խմբագրել Կանոնի Մանրամասները">(Դիտել/Խմբագրել)</a> {# View/Edit Details #}
+            </td>
+            <td>{{ rule.declaration.name }}</td>
+            <td>{{ rule.declaration_point.name }}</td>
+            <td>{{ rule.priority }}</td>
+            <td>{{ rule.created_by.username }}</td>
+            <td class="action-links">
+                <form method="post" action="{% url 'approve_global_proposal' rule.id %}" style="display: inline;" onsubmit="return confirm('Հաստատե՞լ այս կանոնը և դարձնել գլոբալ։');"> {# Approve this rule and make it global? #}
+                    {% csrf_token %}
+                    <button type="submit" class="approve-btn">Հաստատել Գլոբալ</button> {# Approve Global #}
+                </form>
+                <form method="post" action="{% url 'reject_global_proposal' rule.id %}" style="display: inline;" onsubmit="return confirm('Մերժե՞լ այս առաջարկը։ Կանոնը կմնա հատուկ իր հայտարարագրի համար։');"> {# Reject this proposal? The rule will remain specific... #}
+                    {% csrf_token %}
+                    <button type="submit" class="reject-btn">Մերժել</button> {# Reject #}
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #28a745; font-weight: bold; margin-top: 20px;">✅ Սպասվող գլոբալ կանոնների առաջարկներ չկան։</p> {# No pending global rule proposals. #}
+    {% endif %}
+</div>
+</body>
+</html>

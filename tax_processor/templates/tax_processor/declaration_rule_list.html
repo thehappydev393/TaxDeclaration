@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <title>{{ list_title }}</title>
     <style>
-        /* (Using styles similar to your existing rule_list.html) */
+        /* (Using styles similar to your rule_list.html) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
         .container { max-width: 1100px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
@@ -33,21 +33,19 @@
         .priority-low { color: #6c757d; }
         .status-active { color: #28a745; font-weight: bold; }
         .status-inactive { color: #dc3545; }
-        .status-pending { color: #ffc107; font-weight: bold; }
+        .status-pending { color: #ffc107; font-weight: bold; } /* Yellow for pending */
 
         /* Action Links */
         .action-links a { color: #007bff; text-decoration: none; margin-right: 10px; }
         .action-links button { border: none; background: none; cursor: pointer; padding: 0; font-size: 0.95em; vertical-align: middle; }
         .action-links .delete-btn { color: red; }
-        .action-links .propose-btn { color: #28a745; margin-left: 5px; }
+        .action-links .propose-btn { color: #28a745; margin-left: 5px; } /* Green for propose */
     </style>
 </head>
 <body>
 <div class="container">
     <h1>{{ list_title }}</h1>
-    {% if not is_global_list and declaration %}
     <h2>Հայտարարագիր։ {{ declaration.name }}</h2>
-    {% endif %}
 
     {% if messages %}
     <ul class="messages">
@@ -58,16 +56,11 @@
     {% endif %}
 
     <div class="action-bar">
-        {% if is_global_list %}
-        <a href="{% url 'rule_create_global' %}" class="create-btn">+ Ստեղծել Նոր Գլոբալ Կանոն</a> {# Create New Global Rule #}
-        <a href="{% url 'user_dashboard' %}" class="nav-link">← Վերադառնալ Գլխավոր Էջ</a>
-        {% elif declaration %}
-        <a href="{% url 'declaration_rule_create' declaration.id %}" class="create-btn">+ Ստեղծել Նոր Կանոն Այս Հայտարարագրի Համար</a> {# Create New Rule for this Declaration #}
+        <a href="{% url 'declaration_rule_create' declaration.id %}" class="create-btn">+ Ստեղծել Նոր Կանոն Այս Հայտարարագրի Համար</a>
         <div>
             <a href="{% url 'declaration_detail' declaration.id %}" class="nav-link">← Վերադառնալ Հայտարարագրի Մանրամասներ</a> |
             <a href="{% url 'user_dashboard' %}" class="nav-link" style="margin-left: 15px;">Գնալ Գլխավոր Էջ</a>
         </div>
-        {% endif %}
     </div>
 
     <table>
@@ -90,19 +83,12 @@
             <td>{{ rule.declaration_point.name }}</td>
             <td class="{% if rule.is_active %}status-active{% else %}status-inactive{% endif %}">{% if rule.is_active %}✅ Այո{% else %}❌ Ոչ{% endif %}</td>
             <td class="{% if rule.proposal_status == 'PENDING_GLOBAL' %}status-pending{% endif %}">
-                {{ rule.get_proposal_status_display }}
+                {{ rule.get_proposal_status_display }} {# Uses choices display value #}
             </td>
             <td>{{ rule.created_at|date:"Y-m-d" }} ({{ rule.created_by.username }})</td>
             <td class="action-links">
-                {% if is_global_list %}
-                <a href="{% url 'rule_update_global' rule.id %}">Խմբագրել</a> |
-                <form method="post" action="{% url 'rule_delete_global' rule.id %}" style="display: inline;" onsubmit="return confirm('Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս գլոբալ կանոնը։');"> {# Are you sure you want to delete this global rule? #}
-                    {% csrf_token %}
-                    <button type="submit" class="delete-btn">Ջնջել</button>
-                </form>
-                {% elif declaration %}
                 <a href="{% url 'declaration_rule_update' declaration.id rule.id %}">Խմբագրել</a> |
-                <form method="post" action="{% url 'declaration_rule_delete' declaration.id rule.id %}" style="display: inline;" onsubmit="return confirm('Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս կանոնը։');"> {# Are you sure you want to delete this rule? #}
+                <form method="post" action="{% url 'declaration_rule_delete' declaration.id rule.id %}" style="display: inline;" onsubmit="return confirm('Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս կանոնը։');">
                     {% csrf_token %}
                     <button type="submit" class="delete-btn">Ջնջել</button>
                 </form>
@@ -113,14 +99,11 @@
                     <button type="submit" class="propose-btn">Առաջարկել Գլոբալ</button> {# Propose Global #}
                 </form>
                 {% endif %}
-                {% endif %}
             </td>
         </tr>
         {% empty %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">
-                {% if is_global_list %}Գլոբալ կանոններ դեռևս սահմանված չեն։{% else %}Այս հայտարարագրի համար դեռևս հատուկ կանոններ սահմանված չեն։{% endif %} {# No global rules defined yet. / No specific rules defined... #}
-            </td>
+            <td colspan="7" style="text-align: center; color: #6c757d;">Այս հայտարարագրի համար դեռևս հատուկ կանոններ սահմանված չեն։</td> {# No specific rules defined for this declaration yet. #}
         </tr>
         {% endfor %}
         </tbody>

@@ -1,171 +1,56 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hy"> {# Changed lang to hy for Armenian #}
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/png" href="{% static 'tax_processor/favicon.png' %}">
-    <title>Հարկային Համապատասխանության Կառավարում</title>
+    <title>Հարկային Համապատասխանության Կառավարում</title> {# Tax Compliance Management #}
     <style>
-        /* General Reset and Typography */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-
-        /* Main Layout */
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        /* Header and Status Bar */
-        .header-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 15px;
-            margin-bottom: 30px;
-        }
-        h1 {
-            color: #007bff;
-            font-size: 2em;
-            margin: 0;
-        }
-        .user-status {
-            font-size: 0.9em;
-            color: #555;
-        }
-        .user-status strong {
-            font-weight: 600;
-        }
-
-        /* Message Styling */
-        .messages {
-            list-style: none;
-            padding: 0;
-            margin-bottom: 20px;
-        }
-        .messages li {
-            padding: 10px 15px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            font-weight: 500;
-        }
+        /* (Keep existing styles) */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #007bff; padding-bottom: 15px; margin-bottom: 30px; }
+        h1 { color: #007bff; font-size: 2em; margin: 0; }
+        .user-status { font-size: 0.9em; color: #555; }
+        .user-status strong { font-weight: 600; }
+        .messages { list-style: none; padding: 0; margin-bottom: 20px; }
+        .messages li { padding: 10px 15px; border-radius: 4px; margin-bottom: 10px; font-weight: 500; }
         .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6fb; }
         .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-
-        /* Action Buttons and Links (Top Bar) */
-        .action-area {
-            margin-bottom: 30px;
-        }
-        .action-area a, .action-area button {
-            display: inline-block;
-            padding: 10px 15px;
-            border-radius: 5px;
-            text-decoration: none;
-            font-weight: bold;
-            margin-right: 10px;
-            transition: background-color 0.2s;
-            border: none;
-            cursor: pointer;
-        }
-        .action-area .upload-btn {
-            background-color: #28a745;
-            color: white;
-        }
-        .action-area .review-btn {
-            background-color: #efb508;
-            color: white;
-        }
-        .action-area .rule-btn {
-            background-color: #6c757d;
-            color: white;
-        }
-
-        /* Table Styling */
-        h2 {
-            font-size: 1.5em;
-            color: #007bff;
-            margin-top: 30px;
-            margin-bottom: 15px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-            text-align: left;
-        }
-        th {
-            background-color: #e9ecef;
-            color: #495057;
-            font-weight: 600;
-        }
-        tr:hover {
-            background-color: #f8f9fa;
-        }
-
-        /* Specific Status Indicators */
-        .alert-unmatched {
-            background-color: #fff3cd;
-            color: #856404;
-            font-weight: bold;
-        }
-
-        /* --- TABLE ACTION BUTTON STYLES (NEW/MODIFIED) --- */
-        .action-cell {
-            white-space: nowrap; /* Keep buttons on one line */
-        }
-        .action-cell .btn {
-            display: inline-block;
-            padding: 5px 10px;
-            margin-right: 5px;
-            border-radius: 4px;
-            text-decoration: none;
-            font-size: 0.85em;
-            font-weight: 600;
-            text-align: center;
-        }
-        .btn-analyze {
-            background-color: #007bff;
-            color: white;
-        }
-        .btn-analyze:hover {
-            background-color: #0056b3;
-        }
-        .btn-review {
-            background-color: #dc3545; /* Red for urgent action */
-            color: white;
-        }
-        .btn-review:hover {
-            background-color: #c82333;
-        }
-        /* --- END TABLE ACTION BUTTON STYLES --- */
+        .action-area { margin-bottom: 30px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;}
+        .action-area a, .action-area button { display: inline-block; padding: 10px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; transition: background-color 0.2s; border: none; cursor: pointer; }
+        .upload-btn { background-color: #28a745; color: white; }
+        .review-btn { background-color: #ffc107; color: #343a40; }
+        .rule-btn { background-color: #6c757d; color: white; }
+        .proposal-link { font-weight: bold; color: #dc3545; text-decoration: none; margin-left: 15px;}
+        .proposal-link:hover { text-decoration: underline; }
+        h2 { font-size: 1.5em; color: #007bff; margin-top: 30px; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+        th { background-color: #e9ecef; color: #495057; font-weight: 600; }
+        tr:hover { background-color: #f8f9fa; }
+        .alert-unmatched { background-color: #fff3cd; color: #856404; font-weight: bold; }
+        .action-cell { white-space: nowrap; }
+        .action-cell .btn { display: inline-block; padding: 5px 10px; margin-right: 5px; border-radius: 4px; text-decoration: none; font-size: 0.85em; font-weight: 600; text-align: center; }
+        .btn-analyze { background-color: #007bff; color: white; }
+        .btn-analyze:hover { background-color: #0056b3; }
+        .btn-review { background-color: #dc3545; color: white; }
+        .btn-review:hover { background-color: #c82333; }
     </style>
 </head>
 <body>
 <div class="container">
 
     <div class="header-bar">
-        <h1>Հարկային Համապատասխանության Համակարգ</h1>
+        <h1>Հարկային Համապատասխանության Համակարգ</h1> {# Tax Compliance System #}
         <div class="user-status">
             {% if user.is_authenticated %}
-            <span style="font-size: 0.9em; color: #555;">Մուտք գործված է որպես: <strong>{{ user.username }}</strong></span>
+            <span>Մուտք գործված է որպես։ <strong>{{ user.username }}</strong> {% if is_admin %}(SUPERADMIN){% endif %}</span> {# Logged in as: #}
             <form method="post" action="{% url 'logout' %}" style="display: inline; margin-left: 15px;">
                 {% csrf_token %}
                 <button type="submit" style="color: #a00; border: none; background: none; cursor: pointer; padding: 0; font-size: 1em; text-decoration: underline;">
-                    Ելք
+                    Ելք {# Logout #}
                 </button>
             </form>
             {% endif %}
@@ -182,7 +67,7 @@
 
     {% if is_admin %}
     <p style="background-color: #f0f8ff; padding: 10px; border-left: 4px solid #007bff;">
-        Դուք մուտք եք գործել որպես <strong>SUPERADMIN</strong>։ Դուք տեսնում եք բոլոր Հայտարարագրերը և ունեք կառավարման գործիքներ։
+        Դուք մուտք եք գործել որպես <strong>SUPERADMIN</strong>։ Դուք տեսնում եք բոլոր Հայտարարագրերը և ունեք կառավարման գործիքներ։ {# You are logged in as SUPERADMIN... #}
     </p>
     {% endif %}
 
@@ -191,32 +76,43 @@
             + Նոր Հայտարարագիր
         </a>
 
-        {% if is_admin %}
-        <a href="{% url 'rule_list' %}" class="rule-btn">
-            Կառավարել Կանոնները
+        <a href="{% url 'review_queue' %}" class="review-btn">
+            Վերանայել Սպասվող Գործարքները {# Review Pending Transactions #}
         </a>
 
-        <a href="{% url 'review_queue' %}" class="review-btn">
-            Վերանայել Բոլոր Սպասվող Գործարքները
+        {% if is_admin %}
+        <a href="{% url 'rule_list_global' %}" class="rule-btn">
+            Կառավարել Գլոբալ Կանոնները {# Manage Global Rules #}
         </a>
-            {% if pending_proposals_count > 0 %}
-            <a href="{% url 'review_proposals' %}" style="margin-left: 20px; margin-top: 20px">
-                <span style="color: #ff8c00;">🔔 Վերանայել Սպասվող Կանոնների Առաջարկները</span>
-            </a>
-            {% endif %}
+
+        <!-- Link for Manual Proposals -->
+        {% if pending_proposals_count > 0 %}
+        <a href="{% url 'review_proposals' %}" class="proposal-link">
+            🔔 Վերանայել Ձեռքով Առաջարկները ({{ pending_proposals_count }}) {# Review Manual Proposals #}
+        </a>
+        {% endif %}
+
+        <!-- UPDATED: Link for Global Rule Proposals -->
+        {% if pending_global_rules_count > 0 %}
+        <a href="{% url 'review_global_proposals' %}" class="proposal-link">
+            🔔 Վերանայել Գլոբալ Կանոնների Առաջարկները ({{ pending_global_rules_count }}) {# Review Global Rule Proposals #}
+        </a>
+        {% endif %}
+        <!-- END UPDATED -->
+
         {% endif %}
     </div>
 
-    <h2>Ձեր Հայտարարագրերը</h2>
+    <h2>Ձեր Հայտարարագրերը</h2> {# Your Declarations #}
     <table>
         <thead>
         <tr>
-            <th>Անվանում</th>
-            <th>Տարեթիվ</th>
-            <th>Քաղվածքներ</th>
-            <th>Գործարքներ</th>
-            <th>Սպասում է Վերանայման</th>
-            <th>Գործողություններ</th>
+            <th>Անվանում</th> {# Name #}
+            <th>Տարեթիվ</th> {# Period Start #}
+            <th>Քաղվածքներ</th> {# Statements #}
+            <th>Գործարքներ</th> {# Transactions #}
+            <th>Սպասում է Վերանայման</th> {# Pending Review #}
+            <th>Գործողություններ</th> {# Actions #}
         </tr>
         </thead>
         <tbody>
@@ -230,16 +126,15 @@
                 {{ declaration.unmatched_count }}
             </td>
             <td class="action-cell">
-                <a href="{% url 'declaration_detail' declaration.id %}" class="btn btn-analyze">Դիտել/Վերլուծել</a>
-
+                <a href="{% url 'declaration_detail' declaration.id %}" class="btn btn-analyze">Դիտել/Վերլուծել</a> {# View/Analyze #}
                 {% if declaration.unmatched_count > 0 %}
-                <a href="{% url 'review_queue_declaration' declaration.id %}" class="btn btn-review">Վերանայել</a>
+                <a href="{% url 'review_queue_declaration' declaration.id %}" class="btn btn-review">Վերանայել</a> {# Review #}
                 {% endif %}
             </td>
         </tr>
         {% empty %}
         <tr>
-            <td colspan="6">Հայտարարագրեր դեռևս չեն ստեղծվել։</td>
+            <td colspan="6">Հայտարարագրեր դեռևս չեն ստեղծվել։</td> {# No declarations created yet. #}
         </tr>
         {% endfor %}
         </tbody>

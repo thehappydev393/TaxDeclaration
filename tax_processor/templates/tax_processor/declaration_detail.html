@@ -1,144 +1,44 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hy"> {# Changed lang to hy for Armenian #}
 <head>
     <meta charset="UTF-8">
-    <title>Հայտարարության Տվյալներ: {{ declaration.name }}</title>
+    <title>Հայտարարության Տվյալներ։ {{ declaration.name }}</title> {# Declaration Details #}
     <style>
-        /* General Layout */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-        }
-        h1 {
-            color: #007bff;
-            font-size: 2em;
-            border-bottom: 2px solid #ccc;
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-        h2 {
-            font-size: 1.4em;
-            color: #495057;
-            margin-top: 25px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 5px;
-        }
-
-        /* Message Styling */
-        .messages {
-            list-style: none;
-            padding: 0;
-            margin-bottom: 20px;
-        }
-        .messages li {
-            padding: 12px 15px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            font-weight: 500;
-        }
+        /* (Keep existing styles) */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 1.4em; color: #495057; margin-top: 25px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .messages { list-style: none; padding: 0; margin-bottom: 20px; }
+        .messages li { padding: 12px 15px; border-radius: 4px; margin-bottom: 10px; font-weight: 500; }
         .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
         .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .messages .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-
-
-        /* Summary and Stats */
-        .summary-box {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            padding: 15px;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            text-align: center;
-        }
-        .stat-card h3 {
-            margin: 0 0 5px 0;
-            font-size: 2.2em;
-            font-weight: 600;
-        }
-        .stat-card p {
-            margin: 0;
-            font-size: 0.9em;
-            color: #6c757d;
-        }
+        .summary-box { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+        .stat-card { padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); text-align: center; }
+        .stat-card h3 { margin: 0 0 5px 0; font-size: 2.2em; font-weight: 600; }
+        .stat-card p { margin: 0; font-size: 0.9em; color: #6c757d; }
         .card-total { background-color: #e9f0ff; color: #007bff; }
         .card-unassigned { background-color: #fff0f0; color: #dc3545; }
         .card-statements { background-color: #e6fff0; color: #28a745; }
-
-
-        /* Action Buttons */
-        .action-container {
-            padding: 20px;
-            background-color: #f8f9fa;
-            border-radius: 6px;
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .action-container button {
-            padding: 12px 25px;
-            border-radius: 5px;
-            border: none;
-            cursor: pointer;
-            font-size: 1.1em;
-            font-weight: bold;
-            transition: background-color 0.2s;
-        }
-        .analyze-btn {
-            background-color: #ffc107; /* Yellow/Orange for Analyze */
-            color: #343a40;
-        }
-        .analyze-btn:hover {
-            background-color: #e0a800;
-        }
-        .report-btn {
-            background-color: #007bff; /* Primary Blue for Report */
-            color: white;
-            text-decoration: none;
-            padding: 12px 25px; /* Match button padding */
-        }
-        .report-btn:hover {
-            background-color: #0056b3;
-        }
-        .info-unassigned {
-            font-weight: 600;
-            color: #dc3545;
-        }
-
-
-        /* Navigation Links */
-        .nav-links {
-            margin-top: 30px;
-            padding-top: 15px;
-            border-top: 1px solid #eee;
-            font-size: 0.9em;
-        }
-        .nav-links a {
-            color: #007bff;
-            text-decoration: none;
-        }
+        .action-container { padding: 20px; background-color: #f8f9fa; border-radius: 6px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
+        .action-container button, .action-container .btn { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; font-size: 1.0em; font-weight: bold; transition: background-color 0.2s; text-decoration: none; display: inline-block; }
+        .analyze-btn { background-color: #ffc107; color: #343a40; }
+        .analyze-btn:hover { background-color: #e0a800; }
+        .report-btn { background-color: #007bff; color: white; }
+        .report-btn:hover { background-color: #0056b3; }
+        .rules-btn { background-color: #6c757d; color: white; } /* Keep style */
+        .rules-btn:hover { background-color: #5a6268; }
+        .info-unassigned { font-weight: 600; color: #dc3545; margin-bottom: 10px;}
+        .nav-links { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
+        .nav-links a { color: #007bff; text-decoration: none; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>Հայտարարության Տվյալներ</h1>
+    <h1>Հայտարարության Տվյալներ</h1> {# Declaration Details #}
 
     {% if messages %}
     <ul class="messages">
@@ -148,51 +48,61 @@
     </ul>
     {% endif %}
 
-    <h2>Ընդհանուր Տեղեկություններ</h2>
-    <p><strong>Անվանում:</strong> {{ declaration.name }}</p>
-    <p><strong>Ժամանակահատված:</strong> {{ declaration.tax_period_start|date:"Y-m-d" }} - {{ declaration.tax_period_end|date:"Y-m-d" }}</p>
-    <p><strong>Հաճախորդ:</strong> {{ declaration.client_reference }}</p>
+    <h2>Ընդհանուր Տեղեկություններ</h2> {# General Info #}
+    <p><strong>Անվանում։</strong> {{ declaration.name }}</p> {# Name #}
+    <p><strong>Ժամանակահատված։</strong> {{ declaration.tax_period_start|date:"Y-m-d" }} - {{ declaration.tax_period_end|date:"Y-m-d" }}</p> {# Period #}
+    <p><strong>Հաճախորդ։</strong> {{ declaration.client_reference }}</p> {# Client #}
+    <p><strong>Կարգավիճակ։</strong> {{ declaration.get_status_display }}</p> {# Status #}
 
-    <h2>Վերլուծության Ամփոփում</h2>
+
+    <h2>Վերլուծության Ամփոփում</h2> {# Analysis Summary #}
     <div class="summary-box">
         <div class="stat-card card-total">
             <h3>{{ total_transactions }}</h3>
-            <p>Ընդհանուր Գործարքներ</p>
+            <p>Ընդհանուր Գործարքներ</p> {# Total Transactions #}
         </div>
         <div class="stat-card card-statements">
             <h3>{{ total_statements }}</h3>
-            <p>Ներբեռնված Քաղվածքներ</p>
+            <p>Ներբեռնված Քաղվածքներ</p> {# Uploaded Statements #}
         </div>
         <div class="stat-card card-unassigned">
             <h3>{{ unassigned_transactions }}</h3>
-            <p>Սպասում է Վերլուծության</p>
+            <p>Սպասում է Վերլուծության/Վերանայման</p> {# Pending Analysis/Review #}
         </div>
     </div>
 
     <div class="action-container">
         <div>
             {% if unassigned_transactions > 0 %}
-            <p class="info-unassigned">Մնացել է {{ unassigned_transactions }} գործարք՝ վերլուծելու համար:</p>
+            <p class="info-unassigned">{{ unassigned_transactions }} գործարք սպասում է վերլուծության կամ ձեռքով վերանայման։</p> {# transactions pending analysis or manual review. #}
             <form action="{% url 'run_analysis' declaration_id=declaration.pk %}" method="post" style="display: inline;">
                 {% csrf_token %}
                 <button type="submit" class="analyze-btn">
                     Կատարել Վերլուծություն
-                </button>
+                </button> {# Run Analysis #}
             </form>
+            <a href="{% url 'review_queue_declaration' declaration_id=declaration.pk %}" class="btn" style="background-color: #dc3545; color: white; margin-left: 10px;">
+                Վերանայել Սպասվողները ({{ unassigned_transactions }}) {# Review Pending #}
+            </a>
             {% else %}
-            <p style="color: #28a745; font-weight: bold;">✅ Բոլոր գործարքները վերլուծված են կամ ձեռքով նշանակված:</p>
+            <p style="color: #28a745; font-weight: bold;">✅ Բոլոր գործարքները վերլուծված են կամ ձեռքով նշանակված։</p> {# All transactions analyzed or manually assigned. #}
             {% endif %}
         </div>
 
-        <div>
-            <a href="{% url 'tax_report' declaration_id=declaration.pk %}" class="report-btn">
+        <div style="text-align: right;">
+            <!-- UPDATED BUTTON FOR SPECIFIC RULES -->
+            <a href="{% url 'declaration_rule_list' declaration_id=declaration.pk %}" class="btn rules-btn">
+                Կառավարել Հատուկ Կանոնները
+            </a> {# Manage Specific Rules #}
+            <!-- END UPDATED BUTTON -->
+            <a href="{% url 'tax_report' declaration_id=declaration.pk %}" class="btn report-btn" style="margin-left: 10px;">
                 Դիտել Հարկային Հայտարարգիրը
-            </a>
+            </a> {# View Tax Report #}
         </div>
     </div>
 
     <div class="nav-links">
-        <a href="{% url 'user_dashboard' %}">← Վերադառնալ Գլխավոր Էջ</a>
+        <a href="{% url 'user_dashboard' %}">← Վերադառնալ Գլխավոր Էջ</a> {# Back to Dashboard #}
     </div>
 </div>
 </body>

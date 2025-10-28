@@ -136,32 +136,53 @@ class DeclarationPoint(models.Model):
 class TaxRule(models.Model):
     """
     Defines a single rule for routing transactions to a declaration point.
+    Can be global (declaration=NULL) or specific to one declaration.
     """
 
-    rule_name = models.CharField(max_length=255, unique=True)
-    priority = models.IntegerField(
-        default=100,
-        help_text="Lower number means higher priority (processed first)."
-    )
-    declaration_point = models.ForeignKey( # CHANGED
-        DeclarationPoint,                  # CHANGED
-        on_delete=models.SET_NULL,         # CHANGED
-        null=True,                         # CHANGED
-        help_text="The final tax category."
-    )
-    # Stores the complex conditions (JSON array structure)
+    rule_name = models.CharField(max_length=255) # Consider removing unique=True if names can repeat across declarations
+    priority = models.IntegerField(default=100, help_text="Lower number means higher priority (processed first).")
+    declaration_point = models.ForeignKey(DeclarationPoint, on_delete=models.SET_NULL, null=True, help_text="The final tax category.")
     conditions_json = models.JSONField(help_text="JSON array defining field checks and logic.")
 
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_rules')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # --- NEW FIELD: Link to Declaration (Optional) ---
+    declaration = models.ForeignKey(
+        Declaration,
+        on_delete=models.CASCADE, # If declaration is deleted, delete its specific rules
+        null=True,                # Allow NULL for global rules
+        blank=True,               # Allow empty in forms/admin
+        related_name='specific_rules',
+        verbose_name="Specific Declaration (if not global)"
+    )
+
+    # --- NEW FIELD: Proposal Status ---
+    PROPOSAL_STATUS_CHOICES = (
+        ('NONE', 'Not Proposed'),
+        ('PENDING_GLOBAL', 'Pending Global Approval'),
+        # ('APPROVED_GLOBAL', 'Approved as Global'), # Optional: Mark approved ones
+        # ('REJECTED_GLOBAL', 'Rejected as Global'), # Optional: Mark rejected ones
+    )
+    proposal_status = models.CharField(
+        max_length=20,
+        choices=PROPOSAL_STATUS_CHOICES,
+        default='NONE',
+        verbose_name="Global Proposal Status"
+    )
+    # --- END NEW FIELDS ---
+
+
     def __str__(self):
-        return f"P{self.priority}: {self.rule_name}"
+        scope = f"Decl: {self.declaration.pk}" if self.declaration else "Global"
+        return f"P{self.priority}: {self.rule_name} ({scope})"
 
     class Meta:
         verbose_name = "Tax Rule"
         verbose_name_plural = "Tax Rules"
+        # Ensure uniqueness for global rules OR within a specific declaration
+        unique_together = ('declaration', 'rule_name') # Rule names must be unique within a declaration or globally
         ordering = ['priority', 'rule_name']
 
 

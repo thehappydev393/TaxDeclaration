@@ -1,66 +1,32 @@
 {% load static %}
-{# We don't need json_filters anymore for this form #}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hy"> {# Changed lang to hy for Armenian #}
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
     <style>
+        /* (Keep existing styles) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
         .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
+        h2 { font-size: 1.6em; color: #495057; margin-bottom: 20px; }
 
         /* Form Layout */
         .field-group { margin-bottom: 25px; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px; }
         label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
-        input[type="text"], input[type="number"], select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            box-sizing: border-box; /* Important for 100% width */
-        }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; }
         small { display: block; color: #6c757d; margin-top: 5px; }
-        p.errorlist { color: red; margin-top: 5px; }
+        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
 
-        /* NEW: Dynamic Formset Styling */
-        .conditions-section {
-            margin-top: 30px;
-            padding: 20px;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-        }
+        /* Dynamic Formset Styling */
+        .conditions-section { margin-top: 30px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; }
         .conditions-section h2 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; }
-
-        .condition-form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 2fr auto;
-            gap: 15px;
-            padding: 15px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: #fff;
-            align-items: flex-start; /* Align tops of elements */
-        }
-        .condition-form-row label {
-            font-size: 0.85em;
-            margin-bottom: 3px;
-        }
+        .condition-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; align-items: flex-start; }
+        .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
 
         /* Button Styling */
-        .btn {
-            padding: 10px 15px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-        .btn-primary { background-color: #007bff; color: white; }
+        .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; text-align: center; }
+        .btn-primary { background-color: #007bff; color: white; font-size: 1.1em; }
         .btn-primary:hover { background-color: #0056b3; }
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
@@ -70,17 +36,25 @@
 <body>
 <div class="container">
     <h1>{{ title }}</h1>
+    {% if declaration %}
+    <h2>Հայտարարագիր։ {{ declaration.name }}</h2>
+    {% endif %}
 
+    <!-- Form action will be determined by view based on context -->
     <form method="post" id="rule-form">
         {% csrf_token %}
 
         {% if form.non_field_errors or formset.non_field_errors %}
         <div style="color: red; padding: 10px; border: 1px solid red; margin-bottom: 15px;">
-            {{ form.non_field_errors }}
-            {{ formset.non_field_errors }}
+            <ul style="margin: 0; padding-left: 20px;">
+                {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                {% for error in formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
         </div>
         {% endif %}
 
+
+        <!-- === Main Rule Details (Name, Priority, Category) === -->
         <div class="field-group">
             {% for field in form %}
             <div style="margin-bottom: 15px;">
@@ -96,73 +70,82 @@
             {% endfor %}
         </div>
 
+        <!-- === Dynamic Conditions Formset === -->
         <div class="conditions-section">
-            <h2>Կանոնի Պայմաններ (Conditions)</h2>
-
+            <h2>Կանոնի Պայմաններ</h2> {# Rule Conditions #}
             {{ formset.management_form }}
+            {% if formset.non_form_errors %}
+            <div style="color: red;">
+                {% for error in formset.non_form_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
             <div id="condition-form-list">
                 {% for form in formset %}
                 <div class="condition-form-row">
                     {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-
                     <div>
-                        {{ form.field.label_tag }}
-                        {{ form.field }}
-                        {{ form.field.errors }}
+                        {{ form.field.label_tag }} {{ form.field }}
+                        {% for error in form.field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                     </div>
                     <div>
-                        {{ form.condition_type.label_tag }}
-                        {{ form.condition_type }}
-                        {{ form.condition_type.errors }}
+                        {{ form.condition_type.label_tag }} {{ form.condition_type }}
+                        {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                     </div>
                     <div>
-                        {{ form.value.label_tag }}
-                        {{ form.value }}
-                        {{ form.value.errors }}
+                        {{ form.value.label_tag }} {{ form.value }}
+                        {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                     </div>
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ form.DELETE }}</div>
-                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
+                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button> {# Delete #}
                         {% endif %}
                     </div>
+                    {% if form.non_field_errors %}
+                    <div style="grid-column: 1 / -1; color: red;">
+                        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
 
+            <!-- Template for new forms -->
             <div id="empty-form-template" style="display: none;">
                 <div class="condition-form-row">
                     {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-                    <div>
-                        {{ formset.empty_form.field.label_tag }}
-                        {{ formset.empty_form.field }}
-                    </div>
-                    <div>
-                        {{ formset.empty_form.condition_type.label_tag }}
-                        {{ formset.empty_form.condition_type }}
-                    </div>
-                    <div>
-                        {{ formset.empty_form.value.label_tag }}
-                        {{ formset.empty_form.value }}
-                    </div>
+                    <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
+                    <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>
+                    <div>{{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}</div>
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
-                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
+                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button> {# Delete #}
                         {% endif %}
                     </div>
                 </div>
             </div>
-
-            <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button>
+            <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button> {# Add Condition #}
         </div>
 
-        <button type="submit" class="btn btn-primary" style="margin-top: 20px; font-size: 1.1em;">Պահպանել Կանոնը</button>
-        <a href="{% url 'rule_list' %}" class="cancel-link">Չեղարկել</a>
+        <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Պահպանել Կանոնը</button> {# Save Rule #}
+        <!-- Cancel link redirects back to the appropriate list view -->
+        {% if is_specific_rule %}
+        {# If it's a specific rule, pass the declaration_id #}
+        <a href="{% url list_url_name declaration_id=declaration.id %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
+        {% else %}
+        {# If it's a global rule, no arguments needed #}
+        <a href="{% url list_url_name %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
+        {% endif %}
     </form>
 </div>
 
+<!-- JAVASCRIPT for dynamic formset -->
 <script>
+    // --- (Keep existing JavaScript for formset add/remove) ---
+    // ... (same JS as before) ...
     document.addEventListener('DOMContentLoaded', function() {
         const formList = document.getElementById('condition-form-list');
         const addBtn = document.getElementById('add-condition-btn');
@@ -171,34 +154,19 @@
         const formPrefix = 'conditions'; // Must match the prefix in the view
 
         addBtn.addEventListener('click', function() {
-            // Get the current number of forms
             let currentFormCount = parseInt(totalFormsInput.value, 10);
-
-            // Create new form HTML, replacing the prefix placeholder
             let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
-
-            // Append to the list
             let tempDiv = document.createElement('div');
             tempDiv.innerHTML = newFormHtml;
             formList.appendChild(tempDiv.firstElementChild);
-
-            // Increment the total forms count
             totalFormsInput.value = currentFormCount + 1;
         });
 
-        // Event delegation for remove buttons
         formList.addEventListener('click', function(e) {
             if (e.target && e.target.classList.contains('btn-remove')) {
-                // Find the parent row
                 let row = e.target.closest('.condition-form-row');
-
-                // Find the DELETE checkbox within this row and check it
                 let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
-                if (deleteCheckbox) {
-                    deleteCheckbox.checked = true;
-                }
-
-                // Hide the row
+                if (deleteCheckbox) { deleteCheckbox.checked = true; }
                 row.style.display = 'none';
             }
         });

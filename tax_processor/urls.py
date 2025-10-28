@@ -1,37 +1,43 @@
-# tax_processor/urls.py (Update)
-
+# tax_processor/urls.py
 from django.urls import path
 from . import views
 
 urlpatterns = [
-    # Dashboard / Home view for the app
+    # 1. Main Dashboard & Ingestion
     path('', views.user_dashboard, name='user_dashboard'),
-
-    # Data Ingestion Paths
     path('upload/', views.upload_statement, name='upload_statement'),
 
-    # Analysis Paths
+    # 2. Declaration Workflow
     path('declaration/<int:declaration_id>/', views.declaration_detail, name='declaration_detail'),
-    path('analyze/<int:declaration_id>/', views.run_declaration_analysis, name='run_analysis'),
+    path('analyze/<int:declaration_id>/', views.run_declaration_analysis, name='run_analysis'), # Changed path from declaration/.../run_analysis
+    path('report/<int:declaration_id>/', views.tax_report, name='tax_report'), # Changed path from declaration/.../report
 
-    # Review Queue Paths
-    # 1. Global View (For Superadmin)
-    path('review/', views.review_queue, name='review_queue'),
-    # 2. Filtered View (For Regular Users/Admin)
-    path('review/<int:declaration_id>/', views.review_queue, name='review_queue_declaration'),
-    path('review/<int:unmatched_id>/resolve/', views.resolve_transaction, name='resolve_transaction'),
+    # 3. Review Queues (Manual Resolution)
+    path('review/', views.review_queue, name='review_queue'), # Global queue
+    path('review/declaration/<int:declaration_id>/', views.review_queue, name='review_queue_declaration'), # Filtered queue - path changed
+    path('review/resolve/<int:unmatched_id>/', views.resolve_transaction, name='resolve_transaction'), # Changed path
 
-    # Reporting Paths (NEW)
-    path('report/<int:declaration_id>/', views.tax_report, name='tax_report'),
+    # 4. Global Rule Management (Superadmin Only) - Paths adjusted slightly for clarity
+    path('rules/global/', views.rule_list_global, name='rule_list_global'), # Renamed view name
+    path('rules/global/create/', views.rule_create_or_update, name='rule_create_global'), # Renamed view name
+    path('rules/global/update/<int:rule_id>/', views.rule_create_or_update, name='rule_update_global'), # Renamed view name
+    path('rules/global/delete/<int:rule_id>/', views.rule_delete, name='rule_delete_global'), # Renamed view name
 
-    # Rule Management Paths
-    path('rules/', views.rule_list, name='rule_list'),
-    path('rules/create/', views.rule_create_or_update, name='rule_create'),
-    path('rules/edit/<int:rule_id>/', views.rule_create_or_update, name='rule_update'),
-    path('rules/delete/<int:rule_id>/', views.rule_delete, name='rule_delete'),
+    # 5. Declaration-Specific Rule Management (NEW)
+    path('declaration/<int:declaration_id>/rules/', views.declaration_rule_list, name='declaration_rule_list'),
+    path('declaration/<int:declaration_id>/rules/create/', views.rule_create_or_update, name='declaration_rule_create'),
+    path('declaration/<int:declaration_id>/rules/update/<int:rule_id>/', views.rule_create_or_update, name='declaration_rule_update'),
+    path('declaration/<int:declaration_id>/rules/delete/<int:rule_id>/', views.rule_delete, name='declaration_rule_delete'),
 
-    # Proposal Review Paths (NEW)
+    # 6. Global Rule Proposal Workflow (NEW)
+    path('rules/propose_global/<int:rule_id>/', views.propose_rule_global, name='propose_rule_global'), # For user to propose
+    path('rules/review_global/', views.review_global_proposals, name='review_global_proposals'), # For admin to list proposals
+    path('rules/review_global/approve/<int:rule_id>/', views.approve_global_proposal, name='approve_global_proposal'), # For admin to approve
+    path('rules/review_global/reject/<int:rule_id>/', views.reject_global_proposal, name='reject_global_proposal'), # For admin to reject
+
+    # 7. Superadmin: Manual Rule Proposal Workflow (Existing - paths adjusted for consistency)
     path('rules/proposals/', views.review_proposals, name='review_proposals'),
-    path('rules/proposals/<int:unmatched_id>/finalize/', views.finalize_rule, name='finalize_rule'),
-    path('rules/proposals/reject/<int:unmatched_id>/', views.reject_proposal, name='reject_proposal'),
+    path('rules/proposals/finalize/<int:unmatched_id>/', views.finalize_rule, name='finalize_rule'),
+    path('rules/proposals/reject_manual/<int:unmatched_id>/', views.reject_proposal, name='reject_proposal'), # Renamed view name
+
 ]
