@@ -74,10 +74,16 @@ TRANSACTION_FIELD_CHOICES = [
 
 CONDITION_TYPE_CHOICES = [
     ('CONTAINS_KEYWORD', 'պարունակում է (contains keyword)'),
+    ('DOES_NOT_CONTAIN_KEYWORD', 'ՉԻ պարունակում (does NOT contain)'), # New
     ('EQUALS', 'հավասար է (equals)'),
+    # ('NOT_EQUALS', 'հավասար ՉԷ (is NOT equal)'), # Optional - uncomment if needed later
     ('REGEX_MATCH', 'համընկնում է REGEX-ին (regex match)'),
+    # ('NOT_REGEX_MATCH', 'ՉԻ համընկնում REGEX-ին (does NOT match regex)'), # Optional - uncomment if needed later
     ('GREATER_THAN', 'մեծ է (>)'),
+    ('GREATER_THAN_OR_EQUAL', 'մեծ է կամ հավասար (>=)'), # New
     ('LESS_THAN', 'փոքր է (<)'),
+    ('LESS_THAN_OR_EQUAL', 'փոքր է կամ հավասար (<=)'), # New
+    # ('RANGE_AMOUNT', 'գումարը միջակայքում է (amount range)'), # Keep if you still use it, otherwise remove
 ]
 
 class ConditionForm(forms.Form):
