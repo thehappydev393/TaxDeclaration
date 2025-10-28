@@ -364,25 +364,110 @@ def review_queue(request, declaration_id=None):
 
 @user_passes_test(is_permitted_user)
 def resolve_transaction(request, unmatched_id):
-    # ... (Keep existing view) ...
-    unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id); tx = unmatched_item.transaction
-    if not (request.user == unmatched_item.assigned_user or is_superadmin(request.user)): messages.error(request, "Not authorized."); return redirect('review_queue')
+    """
+    Displays the form for a user to resolve an unmatched transaction, updates
+    the related records, and optionally creates a NEW declaration-specific rule.
+    """
+    unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
+    tx = unmatched_item.transaction
+    declaration = tx.statement.declaration # Get the related declaration
+
+    # --- Permission Check: Owner or Superadmin ---
+    # User must own the declaration OR be a superadmin to resolve/create rules for it
+    if not (is_superadmin(request.user) or declaration.created_by == request.user):
+        messages.error(request, "Դուք իրավասու չեք լուծելու այս գործարքը։") # Not authorized to resolve
+        # Decide where to redirect: dashboard or maybe declaration detail if accessible?
+        return redirect('user_dashboard') # Redirecting to dashboard for safety
+
     if request.method == 'POST':
         form = ResolutionForm(request.POST)
         if form.is_valid():
-            resolved_point_obj = form.cleaned_data['resolved_point']; propose_rule = form.cleaned_data['propose_rule']; rule_notes = form.cleaned_data['rule_notes']
-            tx.declaration_point = resolved_point_obj; tx.save()
-            unmatched_item.resolved_point = resolved_point_obj.name; unmatched_item.resolution_date = timezone.now(); unmatched_item.status = 'RESOLVED'
-            if propose_rule:
-                proposal_data = {'resolved_point_id': resolved_point_obj.pk, 'resolved_point_name': resolved_point_obj.name, 'notes': rule_notes, 'sample_description': tx.description, 'sample_amount': str(tx.amount),}
-                unmatched_item.rule_proposal_json = proposal_data; unmatched_item.status = 'NEW_RULE_PROPOSED'; messages.info(request, "Resolved! New rule proposed.")
-            else: messages.success(request, "Transaction resolved.")
-            unmatched_item.save()
-            # Redirect intelligently based on where user came from? Or just global queue?
-            # Assuming redirect back to global queue for now
-            return redirect('review_queue')
-    else: form = ResolutionForm(initial={'unmatched_id': unmatched_id})
-    context = {'unmatched_item': unmatched_item, 'transaction': tx, 'form': form,}
+            resolved_point_obj = form.cleaned_data['resolved_point']
+            create_rule = form.cleaned_data['create_specific_rule']
+            new_rule = None # Initialize new_rule
+
+            with db_transaction.atomic(): # Use atomic transaction for multi-step save
+                # 1. Update the original Transaction record
+                tx.declaration_point = resolved_point_obj
+                # tx.matched_rule = None # Clear any old rule match if re-resolving? Optional.
+
+                # 2. Handle Rule Creation (if requested)
+                if create_rule:
+                    rule_name = form.cleaned_data.get('rule_name')
+                    priority = form.cleaned_data.get('priority')
+
+                    # --- Basic Validation ---
+                    if not rule_name:
+                         form.add_error('rule_name', 'Կանոնի անվանումը պարտադիր է։') # Rule name required
+                    if priority is None:
+                         form.add_error('priority', 'Առաջնահերթությունը պարտադիր է։') # Priority required
+
+                    if form.is_valid(): # Re-check form validity after adding potential errors
+                        # --- Auto-generate simple condition based on description ---
+                        condition_value = tx.description[:200] # Use first 200 chars as keyword
+                        conditions = [{
+                            'logic': 'AND',
+                            'checks': [{
+                                'field': 'description',
+                                'type': 'CONTAINS_KEYWORD', # Simple default condition
+                                'value': condition_value
+                            }]
+                        }]
+
+                        try:
+                            new_rule = TaxRule.objects.create(
+                                rule_name=rule_name,
+                                priority=priority,
+                                declaration_point=resolved_point_obj,
+                                conditions_json=conditions,
+                                is_active=True,
+                                created_by=request.user,
+                                declaration=declaration, # Link to the specific declaration
+                                proposal_status='NONE' # Default status
+                            )
+                            tx.matched_rule = new_rule # Link transaction to the new rule
+                            messages.success(request, f"Գործարքը լուծված է։ Նոր հատուկ կանոն '{rule_name}' ստեղծված է։") # Tx resolved. New specific rule created.
+                        except IntegrityError:
+                             # Handle case where rule name already exists for this declaration
+                             form.add_error('rule_name', f"Այս անունով կանոն արդեն գոյություն ունի այս հայտարարագրի համար։") # Rule with this name already exists...
+                             # --- Need to re-render the form with error ---
+                             context = {'unmatched_item': unmatched_item, 'transaction': tx, 'form': form,}
+                             return render(request, 'tax_processor/resolve_transaction.html', context)
+                    else:
+                         # --- Form became invalid (missing name/priority), re-render ---
+                         context = {'unmatched_item': unmatched_item, 'transaction': tx, 'form': form,}
+                         return render(request, 'tax_processor/resolve_transaction.html', context)
+
+                else: # Not creating a rule
+                    messages.success(request, "Գործարքը լուծված է։") # Transaction resolved.
+
+                # 3. Save the transaction (with updated point and possibly matched_rule)
+                tx.save()
+
+                # 4. Update the UnmatchedTransaction status
+                unmatched_item.resolved_point = resolved_point_obj.name # Store name for audit
+                unmatched_item.resolution_date = timezone.now()
+                unmatched_item.status = 'RESOLVED'
+                # Clear any old manual proposal data if it existed
+                unmatched_item.rule_proposal_json = None
+                unmatched_item.save()
+
+            # Redirect after successful save (either with or without rule creation)
+            # Redirect to the declaration-specific review queue if user came from there?
+            # Or just the global one? Let's try redirecting back to declaration detail.
+            return redirect('declaration_detail', declaration_id=declaration.pk)
+            # return redirect('review_queue') # Or redirect to global queue
+
+    else: # GET request
+        # Pre-fill rule name suggestion based on description?
+        initial_rule_name = f"Rule based on: {tx.description[:50]}..."
+        form = ResolutionForm(initial={'unmatched_id': unmatched_id, 'rule_name': initial_rule_name})
+
+    context = {
+        'unmatched_item': unmatched_item,
+        'transaction': tx,
+        'form': form,
+    }
     return render(request, 'tax_processor/resolve_transaction.html', context)
 
 
