@@ -520,7 +520,7 @@ def tax_report(request, declaration_id):
     # ... (Keep existing view) ...
     declaration_qs = filter_declarations_by_user(request.user); declaration = get_object_or_404(declaration_qs, pk=declaration_id)
     transactions_qs = Transaction.objects.filter(statement__declaration=declaration, declaration_point__isnull=False)
-    report_data = transactions_qs.values('declaration_point__name', 'declaration_point__is_income','currency').annotate(total_amount=Sum('amount'), transaction_count=Count('pk')).order_by('declaration_point__is_income', 'declaration_point__name','currency')
+    report_data = transactions_qs.values('declaration_point__name', 'declaration_point__description', 'declaration_point__is_income','currency').annotate(total_amount=Sum('amount'), transaction_count=Count('pk')).order_by('declaration_point__is_income', 'declaration_point__name','currency')
     currency_totals = transactions_qs.values('currency').annotate(total_amount=Sum('amount')).order_by('currency')
     context = {'declaration': declaration, 'report_data': report_data, 'currency_totals': currency_totals,}
     return render(request, 'tax_processor/tax_report.html', context)

@@ -68,7 +68,7 @@
 
         {% for item in group.list %}
         <tr class="{% if group.grouper %}income-row{% else %}expense-row{% endif %}">
-            <td>{{ item.declaration_point__name }}</td>
+            <td>{{ item.declaration_point__name }} - {{ item.declaration_point__description }}</td>
             <td>{% if group.grouper %}Եկամուտ{% else %}Ծախս/Ոչ-հարկվող{% endif %}</td>
             <td>{{ item.transaction_count }}</td>
             <td><strong>{{ item.currency }}</strong></td> <td>{{ item.total_amount|floatformat:2 }}</td>
