@@ -79,3 +79,11 @@ class ResolutionForm(forms.Form):
     rule_action = forms.ChoiceField(choices=ACTION_CHOICES, widget=forms.RadioSelect, initial='resolve_only', label="Կանոնի Գործողություն", help_text="Ընտրեք՝ ինչպես վարվել այս լուծման հետ կանոնների առումով։")
     rule_notes = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 4}), label="Գլոբալ Կանոնի Առաջարկի Նշումներ", help_text="Բացատրեք պայմանները Superadmin-ի համար (օրինակ՝ 'Համընկնում է, եթե նկարագրությունը պարունակում է X և գումարը > Y').")
     unmatched_id = forms.IntegerField(widget=forms.HiddenInput())
+
+class AddStatementsForm(forms.Form):
+    """Simple form to upload additional statements to an existing Declaration."""
+    statement_files = forms.FileField(
+        label="Նոր Բանկային Քաղվածք(ներ)", # New Bank Statement(s)
+        required=True, # Must upload at least one file
+        help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF) ավելացնելու համար։" # Select one or more... to add.
+    )

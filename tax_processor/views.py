@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Q, Count, Sum
 from django.utils import timezone
-from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet
+from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet, AddStatementsForm
 from .services import import_statement_service
 from .rules_engine import RulesEngine
 from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile, DeclarationPoint
@@ -30,28 +30,126 @@ def is_permitted_user(user):
 # -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 def upload_statement(request):
-    # ... (Keep existing view) ...
+    """
+    Handles initial file upload for a NEW Declaration based on Client Name and Year.
+    Prevents adding statements to existing declarations via this page.
+    """
     if request.method == 'POST':
         form = StatementUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            client_name = form.cleaned_data['client_name']; year = form.cleaned_data['year']; uploaded_files = request.FILES.getlist('statement_files')
-            user_client_name = client_name; period_start = date(year, 1, 1); period_end = date(year + 1, 1, 31) # Adjusted period_end slightly
-            declaration_name = f"{year} Հայտարարագիր - {client_name}"
+            client_name = form.cleaned_data['client_name']
+            year = form.cleaned_data['year']
+            uploaded_files = request.FILES.getlist('statement_files')
+
+            # --- DECLARATION CREATION LOGIC ---
+            period_start = date(year, 1, 1)
+            period_end = date(year, 12, 31) # Standard end of year
+            declaration_name = f"{year} Հայտարարագիր - {client_name}" # Declaration
+
+            # --- MODIFIED: Try to CREATE only ---
             try:
-                declaration_obj, created = Declaration.objects.get_or_create(name=declaration_name, defaults={'tax_period_start': period_start, 'tax_period_end': period_end, 'client_reference': client_name, 'status': 'DRAFT', 'created_by': request.user,})
-                if created: messages.info(request, f"New Declaration '{declaration_name}' created automatically.")
-            except IntegrityError: messages.error(request, "DB error occurred finding/creating Declaration."); return render(request, 'tax_processor/upload_statement.html', {'form': form})
+                declaration_obj = Declaration.objects.create(
+                    name=declaration_name,
+                    tax_period_start=period_start,
+                    tax_period_end=period_end,
+                    client_reference=client_name,
+                    status='DRAFT',
+                    created_by=request.user,
+                )
+                messages.success(request, f"Նոր Հայտարարագիր '{declaration_name}' ստեղծված է։") # New Declaration created.
+
+            except IntegrityError:
+                # Declaration with this name already exists
+                messages.error(
+                    request,
+                    f"'{declaration_name}' անունով Հայտարարագիր արդեն գոյություն ունի։ " # Declaration with name ... already exists.
+                    f"Լրացուցիչ քաղվածքներ ավելացնելու համար խնդրում ենք գնալ համապատասխան " # To add more statements, please go to the relevant
+                    f"<a href='{reverse('user_dashboard')}'>Հայտարարագրի մանրամասների էջ</a>։" # Declaration details page (linking dashboard for now)
+                )
+                # Re-render the form with the error
+                return render(request, 'tax_processor/upload_statement.html', {'form': form})
+            # --- END MODIFICATION ---
+
+
+            # --- File Processing Logic (Unchanged) ---
             total_imported = 0
             if uploaded_files:
                 for uploaded_file in uploaded_files:
                     count, message = import_statement_service(uploaded_file=uploaded_file, declaration_obj=declaration_obj, user=request.user)
-                    if count > 0: total_imported += count; messages.success(request, f"File {uploaded_file.name}: {message}")
-                    else: messages.error(request, f"File {uploaded_file.name}: {message}")
-                if total_imported > 0: messages.success(request, f"Batch import complete. Total {total_imported} transactions saved to '{declaration_name}'."); return redirect('upload_statement')
-                else: messages.error(request, "Batch import failed. No transactions processed.")
-            else: messages.warning(request, "No files selected.")
-    else: form = StatementUploadForm()
+                    if count > 0: total_imported += count; messages.success(request, f"Ֆայլ {uploaded_file.name}: {message}")
+                    else: messages.error(request, f"Ֆայլ {uploaded_file.name}: {message}")
+
+                if total_imported > 0:
+                    messages.success(request, f"Բեռնումն ավարտված է։ Ընդհանուր {total_imported} գործարք մշակվել և պահպանվել է '{declaration_name}'-ում։") # Upload complete. Total ... transactions processed and saved...
+                    # Redirect to the NEW declaration's detail page after successful creation and upload
+                    return redirect('declaration_detail', declaration_id=declaration_obj.pk)
+                else:
+                    messages.warning(request, "Ֆայլերը վերբեռնվեցին, բայց գործարքներ չեն մշակվել։ Հայտարարագիրը ստեղծված է։") # Files uploaded, but no transactions processed. Declaration created.
+                    return redirect('declaration_detail', declaration_id=declaration_obj.pk) # Still redirect
+            else:
+                messages.warning(request, "Ֆայլեր ընտրված չեն։ Հայտարարագիրը ստեղծված է։") # No files selected. Declaration created.
+                return redirect('declaration_detail', declaration_id=declaration_obj.pk) # Still redirect
+
+    else: # GET request
+        form = StatementUploadForm()
+
     return render(request, 'tax_processor/upload_statement.html', {'form': form})
+
+@user_passes_test(is_permitted_user)
+def add_statements_to_declaration(request, declaration_id):
+    """
+    Handles uploading additional statement files to an EXISTING Declaration.
+    """
+    declaration = get_object_or_404(Declaration, pk=declaration_id)
+
+    # Permission Check: User must own the declaration OR be superadmin
+    if not (is_superadmin(request.user) or declaration.created_by == request.user):
+        messages.error(request, "Դուք իրավասու չեք այս Հայտարարագրին քաղվածքներ ավելացնելու։") # Not authorized to add statements...
+        return redirect('user_dashboard')
+
+    if request.method == 'POST':
+        form = AddStatementsForm(request.POST, request.FILES)
+        if form.is_valid():
+            uploaded_files = request.FILES.getlist('statement_files')
+            total_imported = 0
+            files_processed = 0
+
+            if uploaded_files:
+                for uploaded_file in uploaded_files:
+                    files_processed += 1
+                    count, message = import_statement_service(
+                        uploaded_file=uploaded_file,
+                        declaration_obj=declaration, # Use the existing declaration
+                        user=request.user
+                    )
+                    if count > 0:
+                        total_imported += count
+                        messages.success(request, f"Ֆայլ {uploaded_file.name}: {message}")
+                    else:
+                        messages.error(request, f"Ֆայլ {uploaded_file.name}: {message}")
+
+                if total_imported > 0:
+                    messages.success(request, f"Բեռնումն ավարտված է։ Ընդհանուր {total_imported} նոր գործարք ավելացվել է '{declaration.name}'-ին։") # Upload complete. Total ... new transactions added...
+                elif files_processed > 0:
+                     messages.warning(request, "Ֆայլ(եր) մշակվեցին, բայց նոր գործարքներ չավելացվեցին։") # File(s) processed, but no new transactions added.
+                else: # Should not happen if form requires files, but as safeguard
+                     messages.error(request, "Վերբեռնման ընթացքում սխալ տեղի ունեցավ։") # Error during upload.
+
+                # Redirect back to declaration detail after processing
+                return redirect('declaration_detail', declaration_id=declaration.pk)
+            else:
+                 # Should be caught by form validation, but handle just in case
+                 messages.warning(request, "Ֆայլեր ընտրված չեն։") # No files selected.
+                 # Re-render form below
+
+    else: # GET request
+        form = AddStatementsForm()
+
+    context = {
+        'form': form,
+        'declaration': declaration
+    }
+    return render(request, 'tax_processor/add_statements_form.html', context)
 
 
 def filter_declarations_by_user(user):

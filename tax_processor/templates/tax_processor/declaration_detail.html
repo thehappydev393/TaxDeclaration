@@ -37,6 +37,8 @@
         .info-unassigned { font-weight: 600; color: #dc3545; margin-bottom: 10px;}
         .nav-links { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
         .nav-links a { color: #007bff; text-decoration: none; }
+        .add-stmt-btn { background-color: #343a40; color: white; } /* Dark gray */
+        .add-stmt-btn:hover { background-color: #23272b; }
     </style>
 </head>
 <body>
@@ -94,6 +96,9 @@
         <div class="action-group" style="text-align: right;"> {# Group other buttons #}
             <a href="{% url 'declaration_rule_list' declaration_id=declaration.pk %}" class="btn rules-btn">
                 Կառավարել Հատուկ Կանոնները {# Manage Specific Rules #}
+            </a>
+            <a href="{% url 'add_statements' declaration_id=declaration.pk %}" class="btn add-stmt-btn">
+                + Ավելացնել Քաղվածքներ {# Add Statements #}
             </a>
             <a href="{% url 'tax_report' declaration_id=declaration.pk %}" class="btn report-btn">
                 Դիտել Հարկային Հայտարարգիրը {# View Tax Report #}

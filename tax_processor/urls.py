@@ -9,6 +9,7 @@ urlpatterns = [
 
     # 2. Declaration Workflow
     path('declaration/<int:declaration_id>/', views.declaration_detail, name='declaration_detail'),
+    path('declaration/<int:declaration_id>/add_statements/', views.add_statements_to_declaration, name='add_statements'),path('declaration/<int:declaration_id>/add_statements/', views.add_statements_to_declaration, name='add_statements'),
     path('analyze/<int:declaration_id>/', views.run_declaration_analysis, name='run_analysis'), # Changed path from declaration/.../run_analysis
     path('analyze_pending/<int:declaration_id>/', views.run_analysis_pending, name='run_analysis_pending'),
     path('report/<int:declaration_id>/', views.tax_report, name='tax_report'), # Changed path from declaration/.../report

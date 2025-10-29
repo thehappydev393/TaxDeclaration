@@ -1,0 +1,63 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <title>Ավելացնել Քաղվածքներ - {{ declaration.name }}</title> {# Add Statements #}
+    <style>
+        /* (Keep existing styles) */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        h1 { color: #28a745; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 1.2em; color: #555; margin-top: 5px; margin-bottom: 25px; font-weight: normal;}
+        .messages { list-style: none; padding: 0; margin-bottom: 20px; } /* ... (message styles) */
+        .messages li a { color: inherit; font-weight: bold; text-decoration: underline;}
+        .form-field { margin-bottom: 20px; } /* Added for manual rendering */
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
+        input[type="file"] { padding: 10px 0; width: 100%; /* Make input take full width */ border: 1px solid #ced4da; border-radius: 4px; padding: 10px; box-sizing: border-box;}
+        .helptext { font-size: 0.9em; color: #6c757d; margin-top: 5px; } /* Style for help text */
+        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
+        button[type="submit"] { padding: 12px 25px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
+        button[type="submit"]:hover { background-color: #1e7e34; }
+        .nav-links { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
+        .nav-links a { color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Ավելացնել Քաղվածքներ</h1> {# Add Statements #}
+    <h2>Հայտարարագիր։ {{ declaration.name }}</h2> {# Declaration #}
+
+    {% if messages %}
+    <ul class="messages"> {% for message in messages %} <li class="{{ message.tags }}">{{ message|safe }}</li> {% endfor %} </ul>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        {# --- Manually render the file field to add 'multiple' --- #}
+        <div class="form-field">
+            <label for="{{ form.statement_files.id_for_label }}">{{ form.statement_files.label }}:</label>
+            <input type="file" name="{{ form.statement_files.html_name }}" required id="{{ form.statement_files.id_for_label }}" multiple> {# Added multiple attribute #}
+            {% if form.statement_files.help_text %}
+            <div class="helptext">{{ form.statement_files.help_text }}</div>
+            {% endif %}
+            {% for error in form.statement_files.errors %}
+            <p class="errorlist">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {# --- End manual rendering --- #}
+
+        {# You can hide non-rendered fields if needed, though statement_files is the only one #}
+        {# {{ form.non_field_errors }} #}
+
+
+        <button type="submit">Ավելացնել և Մշակել Քաղվածքները</button> {# Add and Process Statements #}
+    </form>
+
+    <div class="nav-links">
+        <a href="{% url 'declaration_detail' declaration.id %}">← Վերադառնալ Հայտարարագրի Մանրամասներ</a> {# Back to Declaration Details #}
+    </div>
+</div>
+</body>
+</html>
