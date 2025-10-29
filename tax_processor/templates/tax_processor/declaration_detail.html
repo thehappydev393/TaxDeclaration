@@ -39,6 +39,8 @@
         .nav-links a { color: #007bff; text-decoration: none; }
         .add-stmt-btn { background-color: #343a40; color: white; } /* Dark gray */
         .add-stmt-btn:hover { background-color: #23272b; }
+        .view-tx-btn { background-color: #17a2b8; color: white; } /* Using teal like analyze-pending */
+        .view-tx-btn:hover { background-color: #138496; }
     </style>
 </head>
 <body>
@@ -99,6 +101,9 @@
             </a>
             <a href="{% url 'add_statements' declaration_id=declaration.pk %}" class="btn add-stmt-btn">
                 + Ավելացնել Քաղվածքներ {# Add Statements #}
+            </a>
+            <a href="{% url 'all_transactions_list' declaration_id=declaration.pk %}" class="btn view-tx-btn">
+                Դիտել Բոլոր Գործարքները {# View All Transactions #}
             </a>
             <a href="{% url 'tax_report' declaration_id=declaration.pk %}" class="btn report-btn">
                 Դիտել Հարկային Հայտարարգիրը {# View Tax Report #}

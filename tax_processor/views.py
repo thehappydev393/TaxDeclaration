@@ -15,6 +15,7 @@ import json
 from django.db import transaction as db_transaction
 from django.views.decorators.http import require_POST
 from django.urls import reverse
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger # Import Paginator
 
 # -----------------------------------------------------------
 # 1. PERMISSION HELPERS (Unchanged)
@@ -698,10 +699,71 @@ def finalize_rule(request, unmatched_id): # Create rule from manual proposal
 @require_POST
 @user_passes_test(is_superadmin)
 def reject_proposal(request, unmatched_id): # Reject manual proposal
-    # ... (Keep existing view) ...
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
     if unmatched_item.status == 'NEW_RULE_PROPOSED':
         unmatched_item.status = 'PENDING_REVIEW'; unmatched_item.rule_proposal_json = None; unmatched_item.save()
         messages.warning(request, f"Manual proposal #{unmatched_id} rejected. Transaction returned to 'Pending Review'.")
     else: messages.error(request, "Proposal could not be rejected.")
     return redirect('review_proposals')
+
+
+@user_passes_test(is_permitted_user)
+def all_transactions_list(request, declaration_id):
+    """
+    Displays a paginated, searchable, and sortable list of ALL transactions
+    for a specific declaration.
+    """
+    declaration = get_object_or_404(Declaration, pk=declaration_id)
+
+    # Permission Check: User must own the declaration OR be superadmin
+    if not (is_superadmin(request.user) or declaration.created_by == request.user):
+        messages.error(request, "Դուք իրավասու չեք դիտելու այս հայտարարագրի գործարքները։") # Not authorized to view...
+        return redirect('user_dashboard')
+
+    # Base queryset for the declaration
+    queryset = Transaction.objects.filter(statement__declaration=declaration).select_related(
+        'declaration_point', 'matched_rule'
+    )
+
+    # --- Search ---
+    search_query = request.GET.get('q', '').strip()
+    if search_query:
+        # Search in description OR sender OR amount (exact match for amount might be tricky)
+        queryset = queryset.filter(
+            Q(description__icontains=search_query) |
+            Q(sender__icontains=search_query)
+            # Add Q(amount=Decimal(search_query)) etc. if needed, with error handling
+        )
+
+    # --- Sorting ---
+    sort_by = request.GET.get('sort', '-transaction_date') # Default sort by date descending
+    valid_sort_fields = [
+        'transaction_date', '-transaction_date',
+        'amount', '-amount',
+        'currency', '-currency',
+        'declaration_point__name', '-declaration_point__name', # Sort by assigned point name
+        'sender', '-sender'
+    ]
+    if sort_by not in valid_sort_fields:
+        sort_by = '-transaction_date' # Fallback to default if invalid sort field
+
+    queryset = queryset.order_by(sort_by)
+
+    # --- Pagination ---
+    paginator = Paginator(queryset, 50) # Show 50 transactions per page
+    page_number = request.GET.get('page')
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1) # If page is not an integer, deliver first page.
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages) # If page is out of range, deliver last page.
+
+    context = {
+        'declaration': declaration,
+        'page_obj': page_obj,          # The paginated transactions
+        'search_query': search_query,  # Pass search query back to template
+        'current_sort': sort_by,       # Pass current sort back to template
+        'is_superadmin': is_superadmin(request.user), # For potential future actions
+    }
+    return render(request, 'tax_processor/all_transactions_list.html', context)
