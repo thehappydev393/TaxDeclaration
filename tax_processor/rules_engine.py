@@ -160,3 +160,70 @@ class RulesEngine:
             print(f"   -> Created {new_unmatched_count} new items in the unmatched queue.")
         print(f"--- Analysis Complete. Matched: {matched_count}, Newly Unmatched: {new_unmatched_count}, Cleared from Queue: {cleared_unmatched_count} ---")
         return matched_count, new_unmatched_count, cleared_unmatched_count
+
+
+    @transaction.atomic
+    def run_analysis_pending_only(self, assigned_user: User):
+        """
+        Analyzes only NEW and PENDING_REVIEW transactions.
+        Does NOT re-evaluate NEW_RULE_PROPOSED items.
+        Clears PENDING_REVIEW items if a rule now matches.
+        """
+        print(f"--- Running Analysis (New & Pending Only) for Declaration ID: {self.declaration_id} ---")
+        print(f"   -> Using {len(self.rules)} active rules.")
+
+        # Query includes ONLY NULL and PENDING_REVIEW
+        new_transactions_qs = Transaction.objects.filter(statement__declaration_id=self.declaration_id, declaration_point__isnull=True).select_related('statement')
+        pending_review_tx_qs = Transaction.objects.filter(statement__declaration_id=self.declaration_id, unmatched_record__status='PENDING_REVIEW').select_related('statement', 'unmatched_record')
+        transactions_for_analysis = list(new_transactions_qs) + list(pending_review_tx_qs)
+        transactions_for_analysis = list({tx.pk: tx for tx in transactions_for_analysis}.values())
+        print(f"   -> Found {len(transactions_for_analysis)} transactions for New/Pending analysis.")
+
+        # --- Analysis logic ---
+        transactions_to_update = []; unmatched_records_to_clear = []; newly_unmatched_transactions = []
+        matched_count = 0
+        for tx in transactions_for_analysis:
+            is_matched = False
+            is_pending = hasattr(tx, 'unmatched_record') # Check if it started as PENDING_REVIEW
+
+            for rule in self.rules:
+                if self._check_rule(tx, rule):
+                    tx.matched_rule = rule; tx.declaration_point = rule.declaration_point
+                    transactions_to_update.append(tx); matched_count += 1; is_matched = True
+                    # Only clear if it was previously PENDING_REVIEW
+                    if is_pending:
+                        unmatched_records_to_clear.append(tx.unmatched_record)
+                    break # First Match Wins
+            if not is_matched:
+                # If it was NEW and failed, add to queue
+                if not is_pending:
+                    newly_unmatched_transactions.append(tx)
+                # If it was PENDING and still fails, do nothing to its status
+                # Clear rule match if re-evaluation fails (shouldn't happen if it was pending, but safeguard)
+                if tx.matched_rule is not None or tx.declaration_point is not None:
+                     tx.matched_rule = None; tx.declaration_point = None
+                     if tx not in transactions_to_update: transactions_to_update.append(tx)
+
+        # --- Database Updates (Similar to run_analysis, but NO REVERT logic needed) ---
+        if transactions_to_update:
+            updated_count = Transaction.objects.bulk_update(transactions_to_update, ['matched_rule', 'declaration_point'])
+            print(f"   -> Updated {updated_count} transactions in database.")
+
+        cleared_unmatched_count = 0
+        if unmatched_records_to_clear:
+             # All items in this list were PENDING and are now matched, mark RESOLVED
+             for um in unmatched_records_to_clear:
+                 um.status = 'RESOLVED'; um.resolution_date = timezone.now()
+             UnmatchedTransaction.objects.bulk_update(unmatched_records_to_clear, ['status', 'resolution_date'])
+             cleared_unmatched_count = len(unmatched_records_to_clear)
+             print(f"   -> Marked {len(unmatched_records_to_clear)} previously PENDING items as RESOLVED.")
+
+        new_unmatched_count = 0
+        if newly_unmatched_transactions:
+            unmatched_queue_objects = [UnmatchedTransaction(transaction=tx, assigned_user=assigned_user, status='PENDING_REVIEW') for tx in newly_unmatched_transactions]
+            created_unmatched = UnmatchedTransaction.objects.bulk_create(unmatched_queue_objects)
+            new_unmatched_count = len(created_unmatched)
+            print(f"   -> Created {new_unmatched_count} new items in the unmatched queue.")
+
+        print(f"--- Analysis (New & Pending) Complete. Matched: {matched_count}, Newly Unmatched: {new_unmatched_count}, Cleared from Queue: {cleared_unmatched_count} ---")
+        return matched_count, new_unmatched_count, cleared_unmatched_count

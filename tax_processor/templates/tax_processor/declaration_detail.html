@@ -1,15 +1,18 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="hy"> {# Changed lang to hy for Armenian #}
+<html lang="hy">
 <head>
     <meta charset="UTF-8">
-    <title>Հայտարարության Տվյալներ։ {{ declaration.name }}</title> {# Declaration Details #}
+    <title>Հայտարարագրի Տվյալներ։ {{ declaration.name }}</title>
     <style>
         /* (Keep existing styles) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; }
         h2 { font-size: 1.4em; color: #495057; margin-top: 25px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .action-container { padding: 20px; background-color: #f8f9fa; border-radius: 6px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-start; /* Align items top */ flex-wrap: wrap; gap: 15px;}
+        .action-group { display: flex; flex-direction: column; gap: 10px; } /* Group buttons vertically */
+        .action-container button, .action-container .btn { padding: 10px 15px; /* Slightly smaller */ border-radius: 5px; border: none; cursor: pointer; font-size: 0.95em; /* Slightly smaller */ font-weight: bold; transition: background-color 0.2s; text-decoration: none; display: inline-block; text-align: center; }
         .messages { list-style: none; padding: 0; margin-bottom: 20px; }
         .messages li { padding: 12px 15px; border-radius: 4px; margin-bottom: 10px; font-weight: 500; }
         .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
@@ -23,13 +26,13 @@
         .card-total { background-color: #e9f0ff; color: #007bff; }
         .card-unassigned { background-color: #fff0f0; color: #dc3545; }
         .card-statements { background-color: #e6fff0; color: #28a745; }
-        .action-container { padding: 20px; background-color: #f8f9fa; border-radius: 6px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
-        .action-container button, .action-container .btn { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; font-size: 1.0em; font-weight: bold; transition: background-color 0.2s; text-decoration: none; display: inline-block; }
         .analyze-btn { background-color: #ffc107; color: #343a40; }
         .analyze-btn:hover { background-color: #e0a800; }
+        .analyze-pending-btn { background-color: #17a2b8; color: white; } /* Teal color for new button */
+        .analyze-pending-btn:hover { background-color: #138496; }
         .report-btn { background-color: #007bff; color: white; }
         .report-btn:hover { background-color: #0056b3; }
-        .rules-btn { background-color: #6c757d; color: white; } /* Keep style */
+        .rules-btn { background-color: #6c757d; color: white; }
         .rules-btn:hover { background-color: #5a6268; }
         .info-unassigned { font-weight: 600; color: #dc3545; margin-bottom: 10px;}
         .nav-links { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
@@ -38,7 +41,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>Հայտարարության Տվյալներ</h1> {# Declaration Details #}
+    <h1>Հայտարարագրի Տվյալներ</h1>
 
     {% if messages %}
     <ul class="messages">
@@ -48,56 +51,53 @@
     </ul>
     {% endif %}
 
-    <h2>Ընդհանուր Տեղեկություններ</h2> {# General Info #}
-    <p><strong>Անվանում։</strong> {{ declaration.name }}</p> {# Name #}
-    <p><strong>Ժամանակահատված։</strong> {{ declaration.tax_period_start|date:"Y-m-d" }} - {{ declaration.tax_period_end|date:"Y-m-d" }}</p> {# Period #}
-    <p><strong>Հաճախորդ։</strong> {{ declaration.client_reference }}</p> {# Client #}
-    <p><strong>Կարգավիճակ։</strong> {{ declaration.get_status_display }}</p> {# Status #}
+    <h2>Ընդհանուր Տեղեկություններ</h2>
+    <p><strong>Անվանում։</strong> {{ declaration.name }}</p>
+    <p><strong>Ժամանակահատված։</strong> {{ declaration.tax_period_start|date:"Y-m-d" }} - {{ declaration.tax_period_end|date:"Y-m-d" }}</p>
+    <p><strong>Հաճախորդ։</strong> {{ declaration.client_reference }}</p>
+    <p><strong>Կարգավիճակ։</strong> {{ declaration.get_status_display }}</p>
 
 
-    <h2>Վերլուծության Ամփոփում</h2> {# Analysis Summary #}
+    <h2>Վերլուծության Ամփոփում</h2>
     <div class="summary-box">
-        <div class="stat-card card-total">
-            <h3>{{ total_transactions }}</h3>
-            <p>Ընդհանուր Գործարքներ</p> {# Total Transactions #}
-        </div>
-        <div class="stat-card card-statements">
-            <h3>{{ total_statements }}</h3>
-            <p>Ներբեռնված Քաղվածքներ</p> {# Uploaded Statements #}
-        </div>
-        <div class="stat-card card-unassigned">
-            <h3>{{ unassigned_transactions }}</h3>
-            <p>Սպասում է Վերլուծության/Վերանայման</p> {# Pending Analysis/Review #}
-        </div>
+        <div class="stat-card card-total"> <h3>{{ total_transactions }}</h3> <p>Ընդհանուր Գործարքներ</p> </div>
+        <div class="stat-card card-statements"> <h3>{{ total_statements }}</h3> <p>Ներբեռնված Քաղվածքներ</p> </div>
+        <div class="stat-card card-unassigned"> <h3>{{ unassigned_transactions }}</h3> <p>Սպասում է Վերլուծության/Վերանայման</p> </div>
     </div>
 
     <div class="action-container">
-        <div>
+        <div class="action-group"> {# Group analysis buttons #}
             {% if unassigned_transactions > 0 %}
-            <p class="info-unassigned">{{ unassigned_transactions }} գործարք սպասում է վերլուծության կամ ձեռքով վերանայման։</p> {# transactions pending analysis or manual review. #}
+            <p class="info-unassigned">{{ unassigned_transactions }} գործարք սպասում է վերլուծության կամ ձեռքով վերանայման։</p>
+            {# Button 1: Full Re-analysis #}
             <form action="{% url 'run_analysis' declaration_id=declaration.pk %}" method="post" style="display: inline;">
                 {% csrf_token %}
                 <button type="submit" class="analyze-btn">
-                    Կատարել Վերլուծություն
-                </button> {# Run Analysis #}
+                    Կատարել Ամբողջական Վերլուծություն {# Run Full Re-analysis #}
+                </button>
             </form>
-            <a href="{% url 'review_queue_declaration' declaration_id=declaration.pk %}" class="btn" style="background-color: #dc3545; color: white; margin-left: 10px;">
+            {# Button 2: Analyze New & Pending #}
+            <form action="{% url 'run_analysis_pending' declaration_id=declaration.pk %}" method="post" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="analyze-pending-btn">
+                    Վերլուծել Նորերը և Սպասվողները {# Analyze New & Pending #}
+                </button>
+            </form>
+            <a href="{% url 'review_queue_declaration' declaration_id=declaration.pk %}" class="btn" style="background-color: #dc3545; color: white;">
                 Վերանայել Սպասվողները ({{ unassigned_transactions }}) {# Review Pending #}
             </a>
             {% else %}
-            <p style="color: #28a745; font-weight: bold;">✅ Բոլոր գործարքները վերլուծված են կամ ձեռքով նշանակված։</p> {# All transactions analyzed or manually assigned. #}
+            <p style="color: #28a745; font-weight: bold;">✅ Բոլոր գործարքները վերլուծված են կամ ձեռքով նշանակված։</p>
             {% endif %}
         </div>
 
-        <div style="text-align: right;">
-            <!-- UPDATED BUTTON FOR SPECIFIC RULES -->
+        <div class="action-group" style="text-align: right;"> {# Group other buttons #}
             <a href="{% url 'declaration_rule_list' declaration_id=declaration.pk %}" class="btn rules-btn">
-                Կառավարել Հատուկ Կանոնները
-            </a> {# Manage Specific Rules #}
-            <!-- END UPDATED BUTTON -->
-            <a href="{% url 'tax_report' declaration_id=declaration.pk %}" class="btn report-btn" style="margin-left: 10px;">
-                Դիտել Հարկային Հայտարարգիրը
-            </a> {# View Tax Report #}
+                Կառավարել Հատուկ Կանոնները {# Manage Specific Rules #}
+            </a>
+            <a href="{% url 'tax_report' declaration_id=declaration.pk %}" class="btn report-btn">
+                Դիտել Հարկային Հայտարարգիրը {# View Tax Report #}
+            </a>
         </div>
     </div>
 

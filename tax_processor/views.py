@@ -87,6 +87,30 @@ def run_declaration_analysis(request, declaration_id):
     messages.info(request, f"Found {new_unmatched} new transactions requiring manual review.")
     return redirect('declaration_detail', declaration_id=declaration.pk)
 
+@user_passes_test(is_permitted_user)
+@require_POST
+def run_analysis_pending(request, declaration_id):
+    """Triggers rule matching ONLY for NEW and PENDING_REVIEW transactions."""
+    declaration = get_object_or_404(Declaration, pk=declaration_id)
+    # Permission Check
+    if not (is_superadmin(request.user) or declaration.created_by == request.user):
+        messages.error(request, "Permission denied.")
+        return redirect('user_dashboard')
+
+    assigned_user = request.user
+    engine = RulesEngine(declaration_id=declaration.pk)
+    # Call the NEW engine method
+    matched, new_unmatched, cleared_unmatched = engine.run_analysis_pending_only(assigned_user=assigned_user)
+
+    messages.success(request, f"Վերլուծություն (Նոր և Սպասվող) ավարտվեց «{declaration.name}»-ի համար։") # Analysis (New & Pending) complete...
+    total_processed = matched + new_unmatched; # Cleared is a subset of matched here
+    messages.info(request, f"Ընդհանուր մշակված գործարքներ՝ {total_processed}")
+    messages.info(request, f"Համընկել է {matched} նոր/սպասվող գործարք։") # Matched new/pending...
+    if cleared_unmatched > 0:
+        messages.info(request, f"Մաքրվել է {cleared_unmatched} գործարք 'Սպասում է Վերանայման' հերթից։") # Cleared ... from 'Pending Review' queue.
+    messages.info(request, f"Հայտնաբերվել է {new_unmatched} նոր գործարք, որոնք պահանջում են ձեռքով վերանայում։") # Found ... new transactions requiring manual review.
+
+    return redirect('declaration_detail', declaration_id=declaration.pk)
 
 # -----------------------------------------------------------
 # 3. GLOBAL RULE MANAGEMENT (Superadmin Only) - VIEW NAMES UPDATED

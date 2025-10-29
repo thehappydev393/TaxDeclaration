@@ -37,7 +37,7 @@
     <h1>Վերջնական Հարկային Հայտարարգիր</h1>
 
     <div class="summary-header">
-        <strong>Հայտարարություն:</strong> <span>{{ declaration.name }}</span>
+        <strong>Հայտարարագիր:</strong> <span>{{ declaration.name }}</span>
         <strong>Ժամանակահատված:</strong> <span>{{ declaration.tax_period_start|date:"Y-m-d" }} - {{ declaration.tax_period_end|date:"Y-m-d" }}</span>
     </div>
 
@@ -96,7 +96,7 @@
 
     {% else %}
     <p style="padding: 15px; background-color: #ffe0e0; border-left: 5px solid red;">
-        ⚠️ Այս հայտարարության համար դեռևս չկան համընկած կամ լուծված գործարքներ։ Խնդրում ենք կատարել վերլուծություն կամ վերանայել սպասվող գործարքները։
+        ⚠️ Այս հայտարարագրի համար դեռևս չկան համընկած կամ լուծված գործարքներ։ Խնդրում ենք կատարել վերլուծություն կամ վերանայել սպասվող գործարքները։
     </p>
     {% endif %}
 

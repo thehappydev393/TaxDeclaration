@@ -17,7 +17,7 @@ class DeclarationPointChoiceField(forms.ModelChoiceField):
 # --- (Keep StatementUploadForm as is) ---
 class StatementUploadForm(forms.Form):
     # ... (fields) ...
-    client_name = forms.CharField(max_length=100, label="Հաճախորդի անվանումը", help_text="Օգտագործվում է Հայտարարգիրները մեկ Հայտարարության մեջ խմբավորելու համար:")
+    client_name = forms.CharField(max_length=100, label="Հաճախորդի անվանումը", help_text="Վերնագրի համար:")
     year = forms.IntegerField(label="Հարկային Տարի", initial=date.today().year, min_value=2020, max_value=2099, help_text="Հայտարարագիրը կներառի ընթացիկ տարին գումարած հաջորդ տարվա հունվարի 31-ը:")
     statement_files = forms.FileField(label="Բանկային քաղվածքի ֆայլեր (Excel կամ PDF)", widget=forms.FileInput, required=False, help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF):")
     def __init__(self, *args, **kwargs):
