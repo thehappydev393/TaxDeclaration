@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Q, Count, Sum
 from django.utils import timezone
-from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet, AddStatementsForm
+from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet, AddStatementsForm, TransactionEditForm
 from .services import import_statement_service
 from .rules_engine import RulesEngine
 from .models import Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile, DeclarationPoint
@@ -767,3 +767,79 @@ def all_transactions_list(request, declaration_id):
         'is_superadmin': is_superadmin(request.user), # For potential future actions
     }
     return render(request, 'tax_processor/all_transactions_list.html', context)
+
+@user_passes_test(is_permitted_user)
+def edit_transaction(request, transaction_id):
+    """ Allows editing the assigned declaration point or reverting a transaction to pending."""
+    transaction_obj = get_object_or_404(Transaction.objects.select_related(
+        'statement__declaration', 'declaration_point', 'matched_rule', 'unmatched_record'
+    ), pk=transaction_id)
+    declaration = transaction_obj.statement.declaration
+
+    # Permission Check: User must own the declaration OR be superadmin
+    if not (is_superadmin(request.user) or declaration.created_by == request.user):
+        messages.error(request, "Դուք իրավասու չեք խմբագրելու այս գործարքը։") # Not authorized to edit...
+        return redirect('user_dashboard')
+
+    if request.method == 'POST':
+        form = TransactionEditForm(request.POST)
+        if form.is_valid():
+            new_declaration_point = form.cleaned_data['declaration_point']
+            revert = form.cleaned_data['revert_to_pending']
+
+            with db_transaction.atomic():
+                if revert:
+                    # Revert to Pending Review
+                    transaction_obj.declaration_point = None
+                    transaction_obj.matched_rule = None
+                    transaction_obj.save()
+
+                    # Find or create UnmatchedTransaction record
+                    unmatched, created = UnmatchedTransaction.objects.get_or_create(
+                        transaction=transaction_obj,
+                        defaults={'assigned_user': request.user} # Assign to current user
+                    )
+                    unmatched.status = 'PENDING_REVIEW'
+                    unmatched.resolved_point = None # Clear previous resolution if any
+                    unmatched.resolution_date = None
+                    unmatched.rule_proposal_json = None # Clear proposal
+                    unmatched.save()
+
+                    messages.info(request, "Գործարքը վերադարձվել է 'Սպասում է Վերանայման' կարգավիճակին։") # Transaction reverted...
+
+                elif new_declaration_point != transaction_obj.declaration_point:
+                    # Change Declaration Point (only if different)
+                    transaction_obj.declaration_point = new_declaration_point
+                    transaction_obj.matched_rule = None # Clear rule match if manually changed
+                    transaction_obj.save()
+
+                    # If it had an 'UnmatchedTransaction' record, mark it resolved
+                    if hasattr(transaction_obj, 'unmatched_record'):
+                        unmatched = transaction_obj.unmatched_record
+                        unmatched.status = 'RESOLVED'
+                        unmatched.resolved_point = new_declaration_point.name if new_declaration_point else "Reverted"
+                        unmatched.resolution_date = timezone.now()
+                        unmatched.rule_proposal_json = None # Clear proposal
+                        unmatched.save()
+
+                    messages.success(request, f"Գործարքի հայտարարագրման կետը փոխվել է '{new_declaration_point.name if new_declaration_point else 'None'}'-ի։") # Transaction point changed...
+                else:
+                    # No changes were actually made
+                    messages.warning(request, "Փոփոխություններ չեն կատարվել։") # No changes made.
+
+            # Redirect back to the full list after saving
+            return redirect('all_transactions_list', declaration_id=declaration.pk)
+        # If form is invalid (shouldn't happen with current fields, but good practice)
+        else:
+             messages.error(request, "Խնդրում ենք ուղղել սխալները։") # Please correct the errors.
+
+    else: # GET request
+        # Pre-fill form with current declaration point
+        form = TransactionEditForm(initial={'declaration_point': transaction_obj.declaration_point})
+
+    context = {
+        'form': form,
+        'transaction': transaction_obj,
+        'declaration': declaration
+    }
+    return render(request, 'tax_processor/edit_transaction.html', context)

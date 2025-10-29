@@ -1,0 +1,93 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <title>Խմբագրել Գործարք #{{ transaction.id }}</title> {# Edit Transaction #}
+    <style>
+        /* (Use styles similar to resolve_transaction.html) */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
+        h2 { font-size: 1.4em; color: #495057; margin-top: 25px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+
+        /* Transaction Detail Box */
+        .detail-box { border: 1px solid #dee2e6; padding: 15px; margin-bottom: 30px; border-radius: 4px; background-color: #f8f9fa; }
+        .detail-box p { margin: 5px 0; font-size: 0.95em; }
+        .detail-box strong { color: #343a40; }
+        .detail-box em { color: #007bff; font-style: normal; font-weight: bold; } /* Changed amount color */
+        .detail-box .description { font-style: italic; color: #555;}
+
+        /* Form Styling */
+        form p, form div.form-field { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
+        select, textarea, input[type="text"], input[type="number"], input[type="checkbox"] { margin-right: 5px; } /* Added checkbox */
+        select { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; }
+        .checkbox-label { display: inline-block; font-weight: normal; margin-bottom: 0; } /* Style for checkbox label */
+        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
+        small { display: block; color: #6c757d; margin-top: 5px; }
+
+        /* Button Styling */
+        .button-group { margin-top: 25px; }
+        .save-btn { padding: 12px 25px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; }
+        .save-btn:hover { background-color: #1e7e34; }
+        .cancel-link { color: #6c757d; margin-left: 15px; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Խմբագրել Գործարք</h1> {# Edit Transaction #}
+    <h2>Հայտարարագիր։ {{ declaration.name }}</h2> {# Declaration #}
+
+    {% if messages %}
+    <ul class="messages"> {% for message in messages %} <li class="{{ message.tags }}">{{ message|safe }}</li> {% endfor %} </ul>
+    {% endif %}
+
+    <h2>Գործարքի Մանրամասներ</h2> {# Transaction Details #}
+    <div class="detail-box">
+        <p><strong>ID:</strong> {{ transaction.id }}</p>
+        <p><strong>Ամսաթիվ։</strong> {{ transaction.transaction_date|date:"Y-m-d H:i" }}</p>
+        <p><strong>Գումար։</strong> <em>{{ transaction.amount }} {{ transaction.currency }}</em></p>
+        <p><strong>Ուղարկող։</strong> {{ transaction.sender }} (Հաշիվ։ {{ transaction.sender_account|default:"N/A" }})</p>
+        <p><strong>Նկարագրություն։</strong> <span class="description">{{ transaction.description }}</span></p>
+        <p><strong>Ընթացիկ Կետ։</strong> {{ transaction.declaration_point.name|default:"< Սահմանված չէ >" }}</p> {# Current Point / < Not Set > #}
+        <p><strong>Համընկած Կանոն։</strong> {{ transaction.matched_rule.rule_name|default:"< Ոչ մեկը >" }}</p> {# Matched Rule / < None > #}
+    </div>
+
+    <h2>Փոփոխել Նշանակումը</h2> {# Change Assignment #}
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-field">
+            {{ form.declaration_point.label_tag }}
+            {{ form.declaration_point }}
+            <small>{{ form.declaration_point.help_text }}</small>
+            {% for error in form.declaration_point.errors %}
+            <p class="errorlist">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="form-field">
+            {{ form.revert_to_pending }}
+            <label for="{{ form.revert_to_pending.id_for_label }}" class="checkbox-label">{{ form.revert_to_pending.label }}</label>
+            <small>{{ form.revert_to_pending.help_text }}</small>
+            {% for error in form.revert_to_pending.errors %}
+            <p class="errorlist">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        {% if form.non_field_errors %}
+        <div style="color: red; margin-top: 15px;">
+            {% for error in form.non_field_errors %} <p>{{ error }}</p> {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="button-group">
+            <button type="submit" class="save-btn">Պահպանել Փոփոխությունները</button> {# Save Changes #}
+            <a href="{% url 'all_transactions_list' declaration_id=declaration.pk %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
+        </div>
+    </form>
+
+</div>
+</body>
+</html>

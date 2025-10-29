@@ -138,15 +138,14 @@
                 {% endif %}
             </td>
             <td class="action-links" nowrap>
-                {# Add Edit Link Later #}
-                {# <a href="{% url 'edit_transaction' tx.id %}">Խմբագրել</a> #} {# Edit #}
+                {# --- ADD EDIT LINK --- #}
+                <a href="{% url 'edit_transaction' tx.id %}">Խմբագրել</a> {# Edit #}
+                {# --- END EDIT LINK --- #}
 
-                {# --- MODIFIED: Check if unmatched_record exists before creating link --- #}
                 {% if not tx.declaration_point and tx.unmatched_record %}
-                {# Link to resolve page ONLY if unmatched record exists #}
-                <a href="{% url 'resolve_transaction' tx.unmatched_record.pk %}" style="color: #ff8c00;">Լուծել / Վերանայել</a> {# Resolve / Review #}
+                {# Link to resolve page if pending #}
+                | <a href="{% url 'resolve_transaction' tx.unmatched_record.pk %}" style="color: #ff8c00;">Լուծել</a> {# Resolve #}
                 {% endif %}
-                {# --- END MODIFICATION --- #}
             </td>
         </tr>
         {% empty %}

@@ -87,3 +87,18 @@ class AddStatementsForm(forms.Form):
         required=True, # Must upload at least one file
         help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF) ավելացնելու համար։" # Select one or more... to add.
     )
+
+class TransactionEditForm(forms.Form):
+    """Form to edit the assignment of a single transaction."""
+    declaration_point = DeclarationPointChoiceField(
+        queryset=DeclarationPoint.objects.all().order_by('name'),
+        label="Նշանակված Հայտարարագրման Կետ", # Assigned Declaration Point
+        help_text="Ընտրեք նոր կետ կամ թողեք դատարկ՝ վերադարձնելու համար։", # Select new point or leave blank to revert.
+        required=False # Allow blank selection to revert
+    )
+
+    revert_to_pending = forms.BooleanField(
+        required=False,
+        label="Վերադարձնել «Սպասում է Վերանայման» կարգավիճակին", # Revert to 'Pending Review' status
+        help_text="Նշեք այս վանդակը՝ գործարքը վերանայման հերթ վերադարձնելու համար (կջնջի ընթացիկ նշանակումը)։" # Check this box to return the transaction to the review queue (will clear current assignment).
+    )
