@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="hy"> {# Changed lang to hy for Armenian #}
+<html lang="hy"> {# Armenian language specified #}
 <head>
     <meta charset="UTF-8">
     <title>{{ list_title }}</title>
@@ -22,6 +22,8 @@
         .messages li { padding: 10px 15px; border-radius: 4px; margin-bottom: 10px; font-weight: 500; }
         .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .messages .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; } /* Added info style */
+        .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; } /* Added error style */
 
         /* Table Styling */
         table { width: 100%; border-collapse: collapse; }
@@ -45,7 +47,7 @@
 <body>
 <div class="container">
     <h1>{{ list_title }}</h1>
-    <h2>Հայտարարագիր։ {{ declaration.name }}</h2>
+    <h2>Հայտարարագիր։ {{ declaration.name }}</h2> {# Declaration: #}
 
     {% if messages %}
     <ul class="messages">
@@ -66,13 +68,13 @@
     <table>
         <thead>
         <tr>
-            <th>Առաջնահերթություն</th>
-            <th>Կանոնի Անվանում</th>
-            <th>Հայտարարագրման Կետ</th>
-            <th>Ակտիվ</th>
+            <th>Առաջնահերթություն</th> {# Priority #}
+            <th>Կանոնի Անվանում</th> {# Rule Name #}
+            <th>Հայտարարագրման Կետ</th> {# Declaration Point #}
+            <th>Ակտիվ</th> {# Active #}
             <th>Առաջարկի Կարգավիճակ</th> {# Proposal Status #}
-            <th>Ստեղծվել է</th>
-            <th>Գործողություններ</th>
+            <th>Ստեղծվել է</th> {# Created #}
+            <th>Գործողություններ</th> {# Actions #}
         </tr>
         </thead>
         <tbody>
@@ -80,12 +82,12 @@
         <tr>
             <td class="{% if rule.priority <= 20 %}priority-high{% else %}priority-low{% endif %}">{{ rule.priority }}</td>
             <td>{{ rule.rule_name }}</td>
-            <td>{{ rule.declaration_point.name }}</td>
-            <td class="{% if rule.is_active %}status-active{% else %}status-inactive{% endif %}">{% if rule.is_active %}✅ Այո{% else %}❌ Ոչ{% endif %}</td>
+            <td>{{ rule.declaration_point.name|default:"--" }}</td> {# Added default #}
+            <td class="{% if rule.is_active %}status-active{% else %}status-inactive{% endif %}">{% if rule.is_active %}✅ Այո{% else %}❌ Ոչ{% endif %}</td> {# Yes / No #}
             <td class="{% if rule.proposal_status == 'PENDING_GLOBAL' %}status-pending{% endif %}">
                 {{ rule.get_proposal_status_display }} {# Uses choices display value #}
             </td>
-            <td>{{ rule.created_at|date:"Y-m-d" }} ({{ rule.created_by.username }})</td>
+            <td>{{ rule.created_at|date:"Y-m-d" }} ({{ rule.created_by.username|default:"unknown" }})</td> {# Added default #}
             <td class="action-links">
                 <a href="{% url 'declaration_rule_update' declaration.id rule.id %}">Խմբագրել</a> |
                 <form method="post" action="{% url 'declaration_rule_delete' declaration.id rule.id %}" style="display: inline;" onsubmit="return confirm('Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս կանոնը։');">

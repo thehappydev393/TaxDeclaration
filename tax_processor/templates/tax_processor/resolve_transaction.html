@@ -44,6 +44,12 @@
         .conditions-section h3 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; } /* Use h3 here */
         .condition-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; align-items: flex-start; }
         .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
+
+        /* Value Input/Select Styling */
+        .form-control { /* Common style for inputs/selects in formset */
+            width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
+        }
+
         .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; text-align: center; }
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
@@ -68,7 +74,6 @@
             {% for error in resolution_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
             {% for error in rule_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
             {% for error in condition_formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
-            {# Display field-specific errors near fields #}
         </ul>
     </div>
     {% endif %}
@@ -86,16 +91,14 @@
     <h2>Լուծում</h2>
     <form method="post">
         {% csrf_token %}
-        {{ resolution_form.unmatched_id }} {# Hidden field for resolution form #}
+        {{ resolution_form.unmatched_id }}
 
         {# --- Resolution Form Fields --- #}
         <div class="form-field">
             {{ resolution_form.resolved_point.label_tag }}
             {{ resolution_form.resolved_point }}
             <small>{{ resolution_form.resolved_point.help_text }}</small>
-            {% for error in resolution_form.resolved_point.errors %}
-            <p class="errorlist">{{ error }}</p>
-            {% endfor %}
+            {% for error in resolution_form.resolved_point.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
         </div>
 
         <div class="form-field">
@@ -106,9 +109,7 @@
                 {% endfor %}
             </div>
             <small>{{ resolution_form.rule_action.help_text }}</small>
-            {% for error in resolution_form.rule_action.errors %}
-            <p class="errorlist">{{ error }}</p>
-            {% endfor %}
+            {% for error in resolution_form.rule_action.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
         </div>
 
         {# --- Conditional Section: Propose Global Notes --- #}
@@ -116,9 +117,7 @@
             {{ resolution_form.rule_notes.label_tag }}
             {{ resolution_form.rule_notes }}
             <small>{{ resolution_form.rule_notes.help_text }}</small>
-            {% for error in resolution_form.rule_notes.errors %}
-            <p class="errorlist">{{ error }}</p>
-            {% endfor %}
+            {% for error in resolution_form.rule_notes.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
         </div>
 
         {# --- Conditional Section: Create Specific Rule Form --- #}
@@ -152,7 +151,22 @@
                         {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                         <div>{{ form.field.label_tag }} {{ form.field }} {% for error in form.field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
                         <div>{{ form.condition_type.label_tag }} {{ form.condition_type }} {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
-                        <div>{{ form.value.label_tag }} {{ form.value }} {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
+                        {# --- UPDATED value field rendering --- #}
+                        <div>
+                            {{ form.value.label_tag }}
+                            <input type="text" name="{{ form.prefix }}-value" value="{{ form.value.value|default:'' }}"
+                                   placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ form.prefix }}-value_text">
+                            <select name="{{ form.prefix }}-value" class="condition-value-select form-control" id="id_{{ form.prefix }}-value_select" style="display: none;">
+                                <option value="">---------</option>
+                                {% for bank_name in bank_names %}
+                                <option value="{{ bank_name }}" {% if form.value.value == bank_name %}selected{% endif %}>
+                                    {{ bank_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                        </div>
+                        {# --- END UPDATED div --- #}
                         <div style="align-self: flex-end;">{% if condition_formset.can_delete %}<div style="display: none;">{{ form.DELETE }}</div><button type="button" class="btn btn-danger btn-remove">Ջնջել</button>{% endif %}</div>
                         {% if form.non_field_errors %}
                         <div style="grid-column: 1 / -1; color: red;">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
@@ -166,7 +180,17 @@
                         {% for hidden in condition_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
                         <div>{{ condition_formset.empty_form.field.label_tag }} {{ condition_formset.empty_form.field }}</div>
                         <div>{{ condition_formset.empty_form.condition_type.label_tag }} {{ condition_formset.empty_form.condition_type }}</div>
-                        <div>{{ condition_formset.empty_form.value.label_tag }} {{ condition_formset.empty_form.value }}</div>
+                        {# --- UPDATED value field rendering in template --- #}
+                        <div>
+                            {{ condition_formset.empty_form.value.label_tag }}
+                            <input type="text" name="{{ condition_formset.empty_form.prefix }}-value" value=""
+                                   placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ condition_formset.empty_form.prefix }}-value_text">
+                            <select name="{{ condition_formset.empty_form.prefix }}-value" class="condition-value-select form-control" id="id_{{ condition_formset.empty_form.prefix }}-value_select" style="display: none;">
+                                <option value="">---------</option>
+                                {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
+                            </select>
+                        </div>
+                        {# --- END UPDATED div --- #}
                         <div style="align-self: flex-end;">{% if condition_formset.can_delete %}<div style="display: none;">{{ condition_formset.empty_form.DELETE }}</div><button type="button" class="btn btn-danger btn-remove">Ջնջել</button>{% endif %}</div>
                     </div>
                 </div>
@@ -181,71 +205,113 @@
         </div>
     </form>
 
+    {# --- UPDATED JAVASCRIPT --- #}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const ruleActionRadios = document.querySelectorAll('input[name="{{ resolution_form.rule_action.html_name }}"]'); // Get radio buttons by name
+            // --- Logic for Action Radios ---
+            const ruleActionRadios = document.querySelectorAll('input[name="{{ resolution_form.rule_action.html_name }}"]');
             const ruleCreationSection = document.getElementById('rule-creation-form-section');
             const proposalNotesSection = document.getElementById('proposal-notes-section');
 
-            function toggleSections() {
-                let selectedAction = 'resolve_only'; // Default
-                ruleActionRadios.forEach(radio => {
-                    if (radio.checked) {
-                        selectedAction = radio.value;
-                    }
-                });
-
-                if (selectedAction === 'create_specific') {
-                    ruleCreationSection.style.display = 'block';
-                    proposalNotesSection.style.display = 'none';
-                } else if (selectedAction === 'propose_global') {
-                    ruleCreationSection.style.display = 'none';
-                    proposalNotesSection.style.display = 'block';
-                } else { // resolve_only
-                    ruleCreationSection.style.display = 'none';
-                    proposalNotesSection.style.display = 'none';
-                }
+            function toggleActionSections() {
+                if (!ruleActionRadios.length) return;
+                let selectedAction = 'resolve_only';
+                ruleActionRadios.forEach(radio => { if (radio.checked) { selectedAction = radio.value; } });
+                if (ruleCreationSection) ruleCreationSection.style.display = (selectedAction === 'create_specific') ? 'block' : 'none';
+                if (proposalNotesSection) proposalNotesSection.style.display = (selectedAction === 'propose_global') ? 'block' : 'none';
             }
 
-            ruleActionRadios.forEach(radio => {
-                radio.addEventListener('change', toggleSections);
-            });
+            if(ruleActionRadios.length > 0){
+                ruleActionRadios.forEach(radio => { radio.addEventListener('change', toggleActionSections); });
+                toggleActionSections(); // Initial call
+            }
+            // --- End Action Radios Logic ---
 
-            toggleSections(); // Initial call
 
-            // --- JavaScript for dynamic formset (within rule creation section) ---
+            // --- Logic for Bank Name Select ---
+            const BANK_FIELD_VALUE = 'statement__bank_name';
+
+            function handleFieldChange(fieldSelectElement) {
+                const row = fieldSelectElement.closest('.condition-form-row');
+                if (!row) return;
+                const valueTextInput = row.querySelector('.condition-value-input');
+                const valueSelect = row.querySelector('.condition-value-select');
+                const isBankField = (fieldSelectElement.value === BANK_FIELD_VALUE);
+                if (!valueTextInput || !valueSelect) return;
+
+                if (isBankField) {
+                    valueTextInput.style.display = 'none';
+                    valueSelect.style.display = 'block';
+                    valueSelect.name = valueTextInput.getAttribute('data-original-name') || valueTextInput.name;
+                    valueTextInput.setAttribute('data-original-name', valueTextInput.name);
+                    valueTextInput.name = '';
+                } else {
+                    valueTextInput.style.display = 'block';
+                    valueSelect.style.display = 'none';
+                    valueTextInput.name = valueSelect.getAttribute('data-original-name') || valueSelect.name;
+                    valueSelect.setAttribute('data-original-name', valueSelect.name);
+                    valueSelect.name = '';
+                }
+            }
+            // --- End Bank Name Select Logic ---
+
+
+            // --- Logic for Dynamic Formset (Add/Remove/Widget Swap) ---
             const formList = document.getElementById('condition-form-list');
             const addBtn = document.getElementById('add-condition-btn');
-            // Ensure emptyFormTemplate exists before trying to access innerHTML
             const emptyFormTemplateDiv = document.getElementById('empty-form-template');
             const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
-            const totalFormsInput = document.querySelector('input[name="{{ condition_formset.prefix }}-TOTAL_FORMS"]'); // Use prefix
-            const formPrefix = '{{ condition_formset.prefix }}'; // Use prefix from view
+            const totalFormsInput = document.querySelector('input[name="{{ condition_formset.prefix }}-TOTAL_FORMS"]');
+            const formPrefix = '{{ condition_formset.prefix }}';
 
-            if (addBtn && emptyFormTemplate && totalFormsInput) { // Check if elements exist
+            // Initial setup for existing forms' value widgets
+            formList.querySelectorAll('.condition-form-row').forEach(row => {
+                const fieldSelect = row.querySelector('.condition-field');
+                const valueInput = row.querySelector('.condition-value-input');
+                const valueSelect = row.querySelector('.condition-value-select');
+                if (valueInput) valueInput.setAttribute('data-original-name', valueInput.name);
+                if (valueSelect) valueSelect.setAttribute('data-original-name', valueSelect.name);
+                if (fieldSelect) {
+                    handleFieldChange(fieldSelect); // Set initial state
+                    fieldSelect.addEventListener('change', function(event) { handleFieldChange(event.target); });
+                }
+            });
+
+            // Handle adding new forms
+            if (addBtn && emptyFormTemplate && totalFormsInput) {
                 addBtn.addEventListener('click', function() {
                     let currentFormCount = parseInt(totalFormsInput.value, 10);
                     let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
                     let tempDiv = document.createElement('div');
                     tempDiv.innerHTML = newFormHtml;
-                    // Append the actual form row, not the wrapping div
-                    if (tempDiv.firstElementChild) {
-                        formList.appendChild(tempDiv.firstElementChild);
+                    const newRow = tempDiv.firstElementChild;
+                    if (newRow) {
+                        formList.appendChild(newRow);
                         totalFormsInput.value = currentFormCount + 1;
+                        const newFieldSelect = newRow.querySelector('.condition-field');
+                        if (newFieldSelect) {
+                            // Store original names on new elements
+                            const newValueInput = newRow.querySelector('.condition-value-input');
+                            const newValueSelect = newRow.querySelector('.condition-value-select');
+                            if (newValueInput) newValueInput.setAttribute('data-original-name', newValueInput.name);
+                            if (newValueSelect) newValueSelect.setAttribute('data-original-name', newValueSelect.name);
+                            handleFieldChange(newFieldSelect); // Set initial state
+                            newFieldSelect.addEventListener('change', function(event) { handleFieldChange(event.target); });
+                        }
                     }
                 });
+            } else { console.error("Formset JS (Add) elements not found."); }
 
-                formList.addEventListener('click', function(e) {
-                    if (e.target && e.target.classList.contains('btn-remove')) {
-                        let row = e.target.closest('.condition-form-row');
-                        let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
-                        if (deleteCheckbox) { deleteCheckbox.checked = true; }
-                        row.style.display = 'none';
-                    }
-                });
-            } else {
-                console.error("Formset JS elements not found. Check prefixes and IDs.");
-            }
+            // Handle removing forms (unchanged)
+            formList.addEventListener('click', function(e) {
+                if (e.target && e.target.classList.contains('btn-remove')) {
+                    let row = e.target.closest('.condition-form-row');
+                    let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+                    if (deleteCheckbox) { deleteCheckbox.checked = true; }
+                    row.style.display = 'none';
+                }
+            });
+            // --- End Formset Logic ---
         });
     </script>
 </div>

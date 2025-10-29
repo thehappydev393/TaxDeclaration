@@ -54,8 +54,27 @@ class RulesEngine:
         if not all([field, condition_type]) or value is None:
              print(f"   [Rule Engine Warning] Malformed condition skipped: {condition}")
              return False
-        try: field_value = getattr(transaction, field, None)
-        except AttributeError: print(f"   [Rule Engine Warning] Invalid field '{field}' in condition: {condition}"); return False
+        field_value = None
+        try:
+            # Handle direct fields and related fields (like statement__bank_name)
+            if '__' in field:
+                # Follow relationship (e.g., transaction.statement.bank_name)
+                related_parts = field.split('__')
+                obj = transaction
+                for part in related_parts:
+                    if obj is None: # Break if relationship is null mid-chain
+                        field_value = None
+                        break
+                    obj = getattr(obj, part, None)
+                field_value = obj # Final value after traversing
+            else:
+                # Direct attribute
+                field_value = getattr(transaction, field, None)
+
+        except AttributeError:
+             print(f"   [Rule Engine Warning] Invalid field or relationship '{field}' in condition: {condition}")
+             return False
+
         if field_value is None: return False
 
         str_field_value = str(field_value)

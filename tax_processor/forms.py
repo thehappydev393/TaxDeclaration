@@ -25,7 +25,7 @@ class StatementUploadForm(forms.Form):
 
 
 # --- (Keep ConditionForm, BaseConditionFormSet as they are) ---
-TRANSACTION_FIELD_CHOICES = [ ('description', 'Նկարագրություն (Description)'), ('sender', 'Ուղարկող (Sender)'), ('sender_account', 'Ուղարկողի Հաշիվ (Sender Account)'), ('amount', 'Գումար (Amount)'), ('currency', 'Արժույթ (Currency)'),]
+TRANSACTION_FIELD_CHOICES = [ ('description', 'Նկարագրություն (Description)'), ('sender', 'Ուղարկող (Sender)'), ('sender_account', 'Ուղարկողի Հաշիվ (Sender Account)'), ('amount', 'Գումար (Amount)'), ('currency', 'Արժույթ (Currency)'),('statement__bank_name', 'Բանկի Անվանում (Bank Name)'),]
 CONDITION_TYPE_CHOICES = [ ('CONTAINS_KEYWORD', 'պարունակում է (contains keyword)'), ('DOES_NOT_CONTAIN_KEYWORD', 'ՉԻ պարունակում (does NOT contain)'), ('EQUALS', 'հավասար է (equals)'), ('REGEX_MATCH', 'համընկնում է REGEX-ին (regex match)'), ('GREATER_THAN', 'մեծ է (>)'), ('GREATER_THAN_OR_EQUAL', 'մեծ է կամ հավասար (>=)'), ('LESS_THAN', 'փոքր է (<)'), ('LESS_THAN_OR_EQUAL', 'փոքր է կամ հավասար (<=)'),]
 class ConditionForm(forms.Form):
     field = forms.ChoiceField(choices=TRANSACTION_FIELD_CHOICES, label="Դաշտ", widget=forms.Select(attrs={'class': 'condition-field'}))

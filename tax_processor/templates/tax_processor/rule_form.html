@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="hy"> {# Changed lang to hy for Armenian #}
+<html lang="hy"> {# Armenian language specified #}
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
@@ -24,6 +24,11 @@
         .condition-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; align-items: flex-start; }
         .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
 
+        /* Value Input/Select Styling */
+        .form-control { /* Common style for inputs/selects in formset */
+            width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
+        }
+
         /* Button Styling */
         .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; text-align: center; }
         .btn-primary { background-color: #007bff; color: white; font-size: 1.1em; }
@@ -37,15 +42,15 @@
 <div class="container">
     <h1>{{ title }}</h1>
     {% if declaration %}
-    <h2>Հայտարարագիր։ {{ declaration.name }}</h2>
+    <h2>Հայտարարագիր։ {{ declaration.name }}</h2> {# Declaration: #}
     {% endif %}
 
-    <!-- Form action will be determined by view based on context -->
     <form method="post" id="rule-form">
         {% csrf_token %}
 
         {% if form.non_field_errors or formset.non_field_errors %}
         <div style="color: red; padding: 10px; border: 1px solid red; margin-bottom: 15px;">
+            <h4>Խնդրում ենք ուղղել սխալները։</h4> {# Please correct the errors. #}
             <ul style="margin: 0; padding-left: 20px;">
                 {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
                 {% for error in formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
@@ -54,7 +59,6 @@
         {% endif %}
 
 
-        <!-- === Main Rule Details (Name, Priority, Category) === -->
         <div class="field-group">
             {% for field in form %}
             <div style="margin-bottom: 15px;">
@@ -70,15 +74,12 @@
             {% endfor %}
         </div>
 
-        <!-- === Dynamic Conditions Formset === -->
         <div class="conditions-section">
             <h2>Կանոնի Պայմաններ</h2> {# Rule Conditions #}
             {{ formset.management_form }}
             {% if formset.non_form_errors %}
             <div style="color: red;">
-                {% for error in formset.non_form_errors %}
-                <p>{{ error }}</p>
-                {% endfor %}
+                {% for error in formset.non_form_errors %} <p>{{ error }}</p> {% endfor %}
             </div>
             {% endif %}
             <div id="condition-form-list">
@@ -93,10 +94,24 @@
                         {{ form.condition_type.label_tag }} {{ form.condition_type }}
                         {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                     </div>
+                    {# --- UPDATED value field rendering --- #}
                     <div>
-                        {{ form.value.label_tag }} {{ form.value }}
+                        {{ form.value.label_tag }}
+                        {# Text Input (default) #}
+                        <input type="text" name="{{ form.prefix }}-value" value="{{ form.value.value|default:'' }}"
+                               placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ form.prefix }}-value_text">
+                        {# Select Dropdown (for Bank Name, hidden initially) #}
+                        <select name="{{ form.prefix }}-value" class="condition-value-select form-control" id="id_{{ form.prefix }}-value_select" style="display: none;">
+                            <option value="">---------</option>
+                            {% for bank_name in bank_names %}
+                            <option value="{{ bank_name }}" {% if form.value.value == bank_name %}selected{% endif %}>
+                                {{ bank_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
                         {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                     </div>
+                    {# --- END UPDATED div --- #}
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ form.DELETE }}</div>
@@ -112,13 +127,22 @@
                 {% endfor %}
             </div>
 
-            <!-- Template for new forms -->
             <div id="empty-form-template" style="display: none;">
                 <div class="condition-form-row">
                     {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
                     <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
                     <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>
-                    <div>{{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}</div>
+                    {# --- UPDATED value field rendering in template --- #}
+                    <div>
+                        {{ formset.empty_form.value.label_tag }}
+                        <input type="text" name="{{ formset.empty_form.prefix }}-value" value=""
+                               placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ formset.empty_form.prefix }}-value_text">
+                        <select name="{{ formset.empty_form.prefix }}-value" class="condition-value-select form-control" id="id_{{ formset.empty_form.prefix }}-value_select" style="display: none;">
+                            <option value="">---------</option>
+                            {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
+                        </select>
+                    </div>
+                    {# --- END UPDATED div --- #}
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
@@ -131,36 +155,99 @@
         </div>
 
         <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Պահպանել Կանոնը</button> {# Save Rule #}
-        <!-- Cancel link redirects back to the appropriate list view -->
+
         {% if is_specific_rule %}
-        {# If it's a specific rule, pass the declaration_id #}
         <a href="{% url list_url_name declaration_id=declaration.id %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
         {% else %}
-        {# If it's a global rule, no arguments needed #}
         <a href="{% url list_url_name %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
         {% endif %}
     </form>
 </div>
 
-<!-- JAVASCRIPT for dynamic formset -->
 <script>
-    // --- (Keep existing JavaScript for formset add/remove) ---
-    // ... (same JS as before) ...
     document.addEventListener('DOMContentLoaded', function() {
+        const BANK_FIELD_VALUE = 'statement__bank_name'; // Value for Bank Name field
+
+        function handleFieldChange(fieldSelectElement) {
+            const row = fieldSelectElement.closest('.condition-form-row');
+            if (!row) return;
+
+            const valueTextInput = row.querySelector('.condition-value-input');
+            const valueSelect = row.querySelector('.condition-value-select');
+            const isBankField = (fieldSelectElement.value === BANK_FIELD_VALUE);
+
+            // Ensure both elements exist before proceeding
+            if (!valueTextInput || !valueSelect) return;
+
+            if (isBankField) {
+                valueTextInput.style.display = 'none';
+                valueSelect.style.display = 'block';
+                // Transfer name attribute to the visible element
+                valueSelect.name = valueTextInput.getAttribute('data-original-name') || valueTextInput.name; // Use original name if stored
+                valueTextInput.setAttribute('data-original-name', valueTextInput.name); // Store original name
+                valueTextInput.name = ''; // Clear name from hidden input
+            } else {
+                valueTextInput.style.display = 'block';
+                valueSelect.style.display = 'none';
+                // Transfer name attribute back to the text input
+                valueTextInput.name = valueSelect.getAttribute('data-original-name') || valueSelect.name; // Use original name if stored
+                valueSelect.setAttribute('data-original-name', valueSelect.name); // Store original name
+                valueSelect.name = ''; // Clear name from hidden select
+            }
+        }
+
         const formList = document.getElementById('condition-form-list');
         const addBtn = document.getElementById('add-condition-btn');
-        const emptyFormTemplate = document.getElementById('empty-form-template').innerHTML;
-        const totalFormsInput = document.querySelector('input[name="conditions-TOTAL_FORMS"]');
-        const formPrefix = 'conditions'; // Must match the prefix in the view
+        const emptyFormTemplateDiv = document.getElementById('empty-form-template');
+        const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
+        const totalFormsInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
+        const formPrefix = totalFormsInput ? totalFormsInput.name.split('-')[0] : '{{ formset.prefix }}'; // Get prefix
 
-        addBtn.addEventListener('click', function() {
-            let currentFormCount = parseInt(totalFormsInput.value, 10);
-            let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
-            let tempDiv = document.createElement('div');
-            tempDiv.innerHTML = newFormHtml;
-            formList.appendChild(tempDiv.firstElementChild);
-            totalFormsInput.value = currentFormCount + 1;
+        // Initial setup for existing forms
+        formList.querySelectorAll('.condition-field').forEach(selectElement => {
+            // Store original name attribute for swapping
+            const row = selectElement.closest('.condition-form-row');
+            const valueInput = row.querySelector('.condition-value-input');
+            const valueSelect = row.querySelector('.condition-value-select');
+            if (valueInput) valueInput.setAttribute('data-original-name', valueInput.name);
+            if (valueSelect) valueSelect.setAttribute('data-original-name', valueSelect.name);
+
+            handleFieldChange(selectElement); // Set initial state
+            selectElement.addEventListener('change', function(event) {
+                handleFieldChange(event.target);
+            });
         });
+
+        // Handle adding new forms
+        if (addBtn && emptyFormTemplate && totalFormsInput) {
+            addBtn.addEventListener('click', function() {
+                let currentFormCount = parseInt(totalFormsInput.value, 10);
+                let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
+                let tempDiv = document.createElement('div');
+                tempDiv.innerHTML = newFormHtml;
+                const newRow = tempDiv.firstElementChild;
+
+                if (newRow) {
+                    formList.appendChild(newRow);
+                    totalFormsInput.value = currentFormCount + 1;
+
+                    // Set up event listener and initial state for the NEW row
+                    const newFieldSelect = newRow.querySelector('.condition-field');
+                    if (newFieldSelect) {
+                        // Store original name attributes on the new elements
+                        const newValueInput = newRow.querySelector('.condition-value-input');
+                        const newValueSelect = newRow.querySelector('.condition-value-select');
+                        if (newValueInput) newValueInput.setAttribute('data-original-name', newValueInput.name);
+                        if (newValueSelect) newValueSelect.setAttribute('data-original-name', newValueSelect.name);
+
+                        handleFieldChange(newFieldSelect); // Set initial state
+                        newFieldSelect.addEventListener('change', function(event) {
+                            handleFieldChange(event.target);
+                        });
+                    }
+                }
+            });
+        } else { console.error("Formset JS (Add) elements not found."); }
 
         formList.addEventListener('click', function(e) {
             if (e.target && e.target.classList.contains('btn-remove')) {
