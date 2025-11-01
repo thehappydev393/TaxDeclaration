@@ -157,14 +157,14 @@ class Transaction(models.Model):
     Universal table storing all incoming financial transactions.
     """
     ENTITY_CHOICES = (
-        ('UNDETERMINED', 'Not Determined'),
-        ('INDIVIDUAL', 'Individual (Not Legal Entity)'),
-        ('LEGAL', 'Legal Entity'),
+        ('UNDETERMINED', 'Անորոշ'),
+        ('INDIVIDUAL', 'Ֆիզ. անձ'),
+        ('LEGAL', 'Իրավ. անձ'),
     )
     SCOPE_CHOICES = (
-        ('UNDETERMINED', 'Not Determined'),
-        ('LOCAL', 'Local'),
-        ('INTERNATIONAL', 'International'),
+        ('UNDETERMINED', 'Անորոշ'),
+        ('LOCAL', 'ՀՀ'),
+        ('INTERNATIONAL', 'Միջազգային'),
     )
     statement = models.ForeignKey(Statement, on_delete=models.CASCADE, related_name='transactions')
 
