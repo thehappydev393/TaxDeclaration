@@ -4,6 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Լուծել Գործարքը</title> {# Resolve Transaction #}
+
+    <link href="{% static 'tax_processor/select2/select2.min.css' %}" rel="stylesheet" />
+
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
         .container { max-width: 900px; /* Increased width */ margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
@@ -61,6 +64,12 @@
         .save-btn { padding: 12px 25px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
         .save-btn:hover { background-color: #1e7e34; }
         .cancel-link { color: #6c757d; margin-left: 15px; text-decoration: none; }
+
+        /* NEW: Select2 Width Fix */
+        .select2-container {
+            width: 100% !important;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -205,14 +214,16 @@
         </div>
     </form>
 
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="{% static 'tax_processor/select2/select2.min.js' %}"></script>
+
     {# --- UPDATED JAVASCRIPT --- #}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // --- Logic for Action Radios ---
+            // ... (existing script for Action Radios) ...
             const ruleActionRadios = document.querySelectorAll('input[name="{{ resolution_form.rule_action.html_name }}"]');
             const ruleCreationSection = document.getElementById('rule-creation-form-section');
             const proposalNotesSection = document.getElementById('proposal-notes-section');
-
             function toggleActionSections() {
                 if (!ruleActionRadios.length) return;
                 let selectedAction = 'resolve_only';
@@ -220,17 +231,13 @@
                 if (ruleCreationSection) ruleCreationSection.style.display = (selectedAction === 'create_specific') ? 'block' : 'none';
                 if (proposalNotesSection) proposalNotesSection.style.display = (selectedAction === 'propose_global') ? 'block' : 'none';
             }
-
             if(ruleActionRadios.length > 0){
                 ruleActionRadios.forEach(radio => { radio.addEventListener('change', toggleActionSections); });
                 toggleActionSections(); // Initial call
             }
-            // --- End Action Radios Logic ---
 
-
-            // --- Logic for Bank Name Select ---
+            // ... (existing script for Bank Name Select Logic) ...
             const BANK_FIELD_VALUE = 'statement__bank_name';
-
             function handleFieldChange(fieldSelectElement) {
                 const row = fieldSelectElement.closest('.condition-form-row');
                 if (!row) return;
@@ -253,10 +260,8 @@
                     valueSelect.name = '';
                 }
             }
-            // --- End Bank Name Select Logic ---
 
-
-            // --- Logic for Dynamic Formset (Add/Remove/Widget Swap) ---
+            // ... (existing script for Dynamic Formset Add/Remove/Widget Swap) ...
             const formList = document.getElementById('condition-form-list');
             const addBtn = document.getElementById('add-condition-btn');
             const emptyFormTemplateDiv = document.getElementById('empty-form-template');
@@ -264,7 +269,6 @@
             const totalFormsInput = document.querySelector('input[name="{{ condition_formset.prefix }}-TOTAL_FORMS"]');
             const formPrefix = '{{ condition_formset.prefix }}';
 
-            // Initial setup for existing forms' value widgets
             formList.querySelectorAll('.condition-form-row').forEach(row => {
                 const fieldSelect = row.querySelector('.condition-field');
                 const valueInput = row.querySelector('.condition-value-input');
@@ -272,12 +276,11 @@
                 if (valueInput) valueInput.setAttribute('data-original-name', valueInput.name);
                 if (valueSelect) valueSelect.setAttribute('data-original-name', valueSelect.name);
                 if (fieldSelect) {
-                    handleFieldChange(fieldSelect); // Set initial state
+                    handleFieldChange(fieldSelect);
                     fieldSelect.addEventListener('change', function(event) { handleFieldChange(event.target); });
                 }
             });
 
-            // Handle adding new forms
             if (addBtn && emptyFormTemplate && totalFormsInput) {
                 addBtn.addEventListener('click', function() {
                     let currentFormCount = parseInt(totalFormsInput.value, 10);
@@ -290,19 +293,17 @@
                         totalFormsInput.value = currentFormCount + 1;
                         const newFieldSelect = newRow.querySelector('.condition-field');
                         if (newFieldSelect) {
-                            // Store original names on new elements
                             const newValueInput = newRow.querySelector('.condition-value-input');
                             const newValueSelect = newRow.querySelector('.condition-value-select');
                             if (newValueInput) newValueInput.setAttribute('data-original-name', newValueInput.name);
                             if (newValueSelect) newValueSelect.setAttribute('data-original-name', newValueSelect.name);
-                            handleFieldChange(newFieldSelect); // Set initial state
+                            handleFieldChange(newFieldSelect);
                             newFieldSelect.addEventListener('change', function(event) { handleFieldChange(event.target); });
                         }
                     }
                 });
             } else { console.error("Formset JS (Add) elements not found."); }
 
-            // Handle removing forms (unchanged)
             formList.addEventListener('click', function(e) {
                 if (e.target && e.target.classList.contains('btn-remove')) {
                     let row = e.target.closest('.condition-form-row');
@@ -311,7 +312,20 @@
                     row.style.display = 'none';
                 }
             });
-            // --- End Formset Logic ---
+
+            // --- NEW: Initialize Select2 ---
+            // We use jQuery here because Select2 is a jQuery plugin
+            $('#{{ resolution_form.resolved_point.id_for_label }}').select2({
+                placeholder: "Ընտրեք կատեգորիա", // "Select a category"
+                allowClear: true
+            });
+
+            // Also initialize the one inside the hidden rule form
+            $('#{{ rule_form.declaration_point.id_for_label }}').select2({
+                placeholder: "Ընտրեք կատեգորիա", // "Select a category"
+                allowClear: true
+            });
+            // --- END NEW SCRIPT ---
         });
     </script>
 </div>

@@ -4,6 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
+
+    <link href="{% static 'tax_processor/select2/select2.min.css' %}" rel="stylesheet" />
+
     <style>
         /* (Keep existing styles) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
@@ -36,6 +39,12 @@
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
         .cancel-link { color: #dc3545; margin-left: 15px; text-decoration: none; }
+
+        /* NEW: Select2 Width Fix */
+        .select2-container {
+            width: 100% !important;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -164,6 +173,9 @@
     </form>
 </div>
 
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="{% static 'tax_processor/select2/select2.min.js' %}"></script>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const BANK_FIELD_VALUE = 'statement__bank_name'; // Value for Bank Name field
@@ -176,23 +188,20 @@
             const valueSelect = row.querySelector('.condition-value-select');
             const isBankField = (fieldSelectElement.value === BANK_FIELD_VALUE);
 
-            // Ensure both elements exist before proceeding
             if (!valueTextInput || !valueSelect) return;
 
             if (isBankField) {
                 valueTextInput.style.display = 'none';
                 valueSelect.style.display = 'block';
-                // Transfer name attribute to the visible element
-                valueSelect.name = valueTextInput.getAttribute('data-original-name') || valueTextInput.name; // Use original name if stored
-                valueTextInput.setAttribute('data-original-name', valueTextInput.name); // Store original name
-                valueTextInput.name = ''; // Clear name from hidden input
+                valueSelect.name = valueTextInput.getAttribute('data-original-name') || valueTextInput.name;
+                valueTextInput.setAttribute('data-original-name', valueTextInput.name);
+                valueTextInput.name = '';
             } else {
                 valueTextInput.style.display = 'block';
                 valueSelect.style.display = 'none';
-                // Transfer name attribute back to the text input
-                valueTextInput.name = valueSelect.getAttribute('data-original-name') || valueSelect.name; // Use original name if stored
-                valueSelect.setAttribute('data-original-name', valueSelect.name); // Store original name
-                valueSelect.name = ''; // Clear name from hidden select
+                valueTextInput.name = valueSelect.getAttribute('data-original-name') || valueSelect.name;
+                valueSelect.setAttribute('data-original-name', valueSelect.name);
+                valueSelect.name = '';
             }
         }
 
@@ -201,24 +210,21 @@
         const emptyFormTemplateDiv = document.getElementById('empty-form-template');
         const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
         const totalFormsInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
-        const formPrefix = totalFormsInput ? totalFormsInput.name.split('-')[0] : '{{ formset.prefix }}'; // Get prefix
+        const formPrefix = totalFormsInput ? totalFormsInput.name.split('-')[0] : '{{ formset.prefix }}';
 
-        // Initial setup for existing forms
         formList.querySelectorAll('.condition-field').forEach(selectElement => {
-            // Store original name attribute for swapping
             const row = selectElement.closest('.condition-form-row');
             const valueInput = row.querySelector('.condition-value-input');
             const valueSelect = row.querySelector('.condition-value-select');
             if (valueInput) valueInput.setAttribute('data-original-name', valueInput.name);
             if (valueSelect) valueSelect.setAttribute('data-original-name', valueSelect.name);
 
-            handleFieldChange(selectElement); // Set initial state
+            handleFieldChange(selectElement);
             selectElement.addEventListener('change', function(event) {
                 handleFieldChange(event.target);
             });
         });
 
-        // Handle adding new forms
         if (addBtn && emptyFormTemplate && totalFormsInput) {
             addBtn.addEventListener('click', function() {
                 let currentFormCount = parseInt(totalFormsInput.value, 10);
@@ -230,17 +236,14 @@
                 if (newRow) {
                     formList.appendChild(newRow);
                     totalFormsInput.value = currentFormCount + 1;
-
-                    // Set up event listener and initial state for the NEW row
                     const newFieldSelect = newRow.querySelector('.condition-field');
                     if (newFieldSelect) {
-                        // Store original name attributes on the new elements
                         const newValueInput = newRow.querySelector('.condition-value-input');
                         const newValueSelect = newRow.querySelector('.condition-value-select');
                         if (newValueInput) newValueInput.setAttribute('data-original-name', newValueInput.name);
                         if (newValueSelect) newValueSelect.setAttribute('data-original-name', newValueSelect.name);
 
-                        handleFieldChange(newFieldSelect); // Set initial state
+                        handleFieldChange(newFieldSelect);
                         newFieldSelect.addEventListener('change', function(event) {
                             handleFieldChange(event.target);
                         });
@@ -257,6 +260,14 @@
                 row.style.display = 'none';
             }
         });
+
+        // --- NEW: Initialize Select2 ---
+        // We use jQuery here because Select2 is a jQuery plugin
+        $('#{{ form.declaration_point.id_for_label }}').select2({
+            placeholder: "Ընտրեք կատեգորիա", // "Select a category"
+            allowClear: true
+        });
+        // --- END NEW SCRIPT ---
     });
 </script>
 

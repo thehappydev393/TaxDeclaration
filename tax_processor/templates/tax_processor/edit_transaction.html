@@ -4,6 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Խմբագրել Գործարք #{{ transaction.id }}</title> {# Edit Transaction #}
+
+    <link href="{% static 'tax_processor/select2/select2.min.css' %}" rel="stylesheet" />
+
     <style>
         /* (Use styles similar to resolve_transaction.html) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
@@ -32,6 +35,12 @@
         .save-btn { padding: 12px 25px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; }
         .save-btn:hover { background-color: #1e7e34; }
         .cancel-link { color: #6c757d; margin-left: 15px; text-decoration: none; }
+
+        /* NEW: Select2 Width Fix */
+        .select2-container {
+            width: 100% !important;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -89,5 +98,21 @@
     </form>
 
 </div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="{% static 'tax_processor/select2/select2.min.js' %}"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- NEW: Initialize Select2 ---
+        // We use jQuery here because Select2 is a jQuery plugin
+        $('#{{ form.declaration_point.id_for_label }}').select2({
+            placeholder: "Ընտրեք կատեգորիա", // "Select a category"
+            allowClear: true
+        });
+        // --- END NEW SCRIPT ---
+    });
+</script>
+
 </body>
 </html>
