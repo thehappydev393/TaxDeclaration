@@ -1,3 +1,5 @@
+# tax_processor/admin.py
+
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
@@ -5,68 +7,45 @@ from django.utils.html import format_html
 from django.urls import reverse
 from .models import (
     UserProfile, Declaration, Statement, TaxRule,
-    Transaction, UnmatchedTransaction, DeclarationPoint
+    Transaction, UnmatchedTransaction, DeclarationPoint,
+    EntityTypeRule, TransactionScopeRule # NEW: Import new models
 )
 
 # -----------------------------------------------------------
 # 1. User/Role Admin Setup
+#    (No changes here)
 # -----------------------------------------------------------
 
 class UserProfileInline(admin.StackedInline):
-    """Inline for UserProfile within the standard User admin."""
     model = UserProfile
     can_delete = False
     fields = ('role',)
 
 class UserAdmin(BaseUserAdmin):
-    """
-    Custom User admin to include UserProfile inline and auto-create the profile
-    when a user is added via the standard Admin form.
-    """
     inlines = (UserProfileInline,)
     list_display = BaseUserAdmin.list_display + ('get_role',)
 
     def get_role(self, obj):
-        """Displays the custom role in the user list."""
         try:
             return obj.profile.role
         except UserProfile.DoesNotExist:
             return 'N/A'
     get_role.short_description = 'Role'
 
-    # --- THIS IS THE FIX ---
-    # We REMOVE the custom save_model override entirely.
-
-    # We OVERRIDE save_related instead.
     def save_related(self, request, form, formsets, change):
-        """
-        Custom save_related to ensure a UserProfile is created
-        if the inline form was left blank during user creation.
-        """
-        # First, save all inlines (this will create the UserProfile
-        # if the user filled out the inline form).
         super().save_related(request, form, formsets, change)
-
-        # 'form.instance' is the User object that was just saved.
         user = form.instance
-
-        # After the inlines have run, we check if a profile
-        # was created. If not, we create a default one.
-        # This prevents the duplicate entry error.
         UserProfile.objects.get_or_create(user=user)
-    # --- END OF FIX ---
 
-
-# Re-register User to use the custom UserAdmin
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
 
 # -----------------------------------------------------------
 # 2. Declaration and Statement Administration
+#    (MODIFIED: DeclarationAdmin)
 # -----------------------------------------------------------
 
 class StatementInline(admin.TabularInline):
-    """Inline for Statements within the Declaration detail view."""
     model = Statement
     extra = 0
     fields = ('file_name', 'bank_name', 'upload_date', 'status')
@@ -78,23 +57,39 @@ class StatementInline(admin.TabularInline):
 
 @admin.register(Declaration)
 class DeclarationAdmin(admin.ModelAdmin):
-    list_display = ('name', 'tax_period_start', 'tax_period_end', 'status', 'run_analysis_action')
+    # NEW: Added first_name, last_name
+    list_display = ('name', 'first_name', 'last_name', 'tax_period_start', 'tax_period_end', 'status', 'run_analysis_action')
     list_filter = ('status',)
-    search_fields = ('name', 'client_reference')
-    inlines = [StatementInline] # Show associated statements on the detail page
+    search_fields = ('name', 'client_reference', 'first_name', 'last_name') # NEW: Added search fields
+    inlines = [StatementInline]
+
+    # NEW: Added fields to fieldset
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'client_reference', 'first_name', 'last_name')
+        }),
+        ('Period and Status', {
+            'fields': ('tax_period_start', 'tax_period_end', 'status')
+        }),
+        ('Ownership', {
+            'fields': ('created_by',),
+        }),
+    )
+    readonly_fields = ('created_by',)
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
 
     # Method to count unassigned transactions and link to the detail/analysis view
     def run_analysis_action(self, obj):
-        # Safely count the number of unassigned transactions
+        # (No change to this method)
         unassigned_count = Transaction.objects.filter(
             statement__declaration=obj,
             declaration_point__isnull=True
         ).count()
-
-        # Link to the detail view (which contains the actual 'Run Analysis' button)
         url = reverse('declaration_detail', args=[obj.pk])
-
-        # Display the count and link
         return format_html(
             '<a href="{}" style="background-color: #007bff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px;">Analyze ({})</a>',
             url,
@@ -113,36 +108,48 @@ class StatementAdmin(admin.ModelAdmin):
 
 # -----------------------------------------------------------
 # 3. Transaction and Rules Administration
+#    (MODIFIED: DeclarationPointAdmin, TransactionAdmin)
+#    (NEW: EntityTypeRuleAdmin, TransactionScopeRuleAdmin)
 # -----------------------------------------------------------
 
-@admin.register(DeclarationPoint) # NEW REGISTRATION
+@admin.register(DeclarationPoint)
 class DeclarationPointAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_income', 'description')
-    list_filter = ('is_income',)
+    # NEW: Added is_auto_filled
+    list_display = ('name', 'is_income', 'is_auto_filled', 'description')
+    list_filter = ('is_income', 'is_auto_filled') # NEW: Added filter
     search_fields = ('name',)
-    fields = ('name', 'is_income', 'description')
+    fields = ('name', 'is_income', 'is_auto_filled', 'description') # NEW: Added field
 
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    # 'declaration_point' is now a Foreign Key, display will automatically use the name
-    list_display = ('__str__', 'statement', 'declaration_point', 'matched_rule', 'amount')
-    list_filter = ('declaration_point', 'currency', 'statement__bank_name')
+    # NEW: Added entity_type, transaction_scope
+    list_display = ('__str__', 'statement', 'declaration_point', 'entity_type', 'transaction_scope', 'matched_rule', 'amount')
+    list_filter = ('declaration_point', 'currency', 'statement__bank_name', 'entity_type', 'transaction_scope') # NEW: Added filters
     search_fields = ('description', 'sender', 'sender_account')
     readonly_fields = ('statement', 'transaction_date', 'amount', 'currency', 'description', 'sender', 'sender_account', 'matched_rule')
+    # NEW: Added new fields to fieldset for editing
+    fieldsets = (
+        ('Core Info', {
+            'fields': ('statement', 'transaction_date', 'amount', 'currency', 'description', 'sender', 'sender_account')
+        }),
+        ('Categorization', {
+            'fields': ('declaration_point', 'matched_rule', 'entity_type', 'transaction_scope')
+        }),
+    )
 
 
 @admin.register(TaxRule)
 class TaxRuleAdmin(admin.ModelAdmin):
-    # 'declaration_point' is now a Foreign Key
-    list_display = ('rule_name', 'priority', 'declaration_point', 'is_active', 'created_by', 'created_at')
-    list_filter = ('is_active', 'declaration_point', 'priority')
-    search_fields = ('rule_name', 'declaration_point__name') # Search through the FK name
+    # (No changes here, just for context)
+    list_display = ('rule_name', 'priority', 'declaration_point', 'is_active', 'created_by', 'created_at', 'declaration')
+    list_filter = ('is_active', 'declaration_point', 'priority', 'declaration')
+    search_fields = ('rule_name', 'declaration_point__name')
     ordering = ('priority',)
     readonly_fields = ('created_by', 'created_at')
     fieldsets = (
         (None, {
-            'fields': ('rule_name', 'priority', 'declaration_point', 'conditions_json', 'is_active'),
+            'fields': ('rule_name', 'priority', 'declaration_point', 'conditions_json', 'is_active', 'declaration'),
         }),
         ('Audit', {
             'fields': ('created_by', 'created_at'),
@@ -154,6 +161,48 @@ class TaxRuleAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
+# --- NEW: Admin registration for new rule models ---
+class BaseRuleAdmin(admin.ModelAdmin):
+    """Base class for new rule admins to reduce repetition."""
+    list_display = ('rule_name', 'priority', 'is_active', 'created_by', 'created_at', 'declaration')
+    list_filter = ('is_active', 'priority', 'declaration')
+    search_fields = ('rule_name',)
+    ordering = ('priority',)
+    readonly_fields = ('created_by', 'created_at')
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+@admin.register(EntityTypeRule)
+class EntityTypeRuleAdmin(BaseRuleAdmin):
+    list_display = BaseRuleAdmin.list_display + ('entity_type_result',)
+    list_filter = BaseRuleAdmin.list_filter + ('entity_type_result',)
+    fieldsets = (
+        (None, {
+            'fields': ('rule_name', 'priority', 'entity_type_result', 'conditions_json', 'is_active', 'declaration'),
+        }),
+        ('Audit', {
+            'fields': ('created_by', 'created_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+@admin.register(TransactionScopeRule)
+class TransactionScopeRuleAdmin(BaseRuleAdmin):
+    list_display = BaseRuleAdmin.list_display + ('scope_result',)
+    list_filter = BaseRuleAdmin.list_filter + ('scope_result',)
+    fieldsets = (
+        (None, {
+            'fields': ('rule_name', 'priority', 'scope_result', 'conditions_json', 'is_active', 'declaration'),
+        }),
+        ('Audit', {
+            'fields': ('created_by', 'created_at'),
+            'classes': ('collapse',),
+        }),
+    )
+# --- END NEW ---
 
 @admin.register(UnmatchedTransaction)
 class UnmatchedTransactionAdmin(admin.ModelAdmin):

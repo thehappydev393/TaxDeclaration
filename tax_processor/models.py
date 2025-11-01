@@ -6,7 +6,7 @@ from django.db.models import F # Used for self-referential priority check (optio
 
 # ====================================================================
 # 1. USER AND ROLE MANAGEMENT
-#    We extend Django's built-in User model for custom roles.
+#    (No changes here)
 # ====================================================================
 
 class UserProfile(models.Model):
@@ -46,7 +46,7 @@ class UserProfile(models.Model):
 
 # ====================================================================
 # 2. DECLARATION ENTITY
-#    The top-level grouping for a tax filing period/client.
+#    (MODIFIED: Added first_name and last_name)
 # ====================================================================
 
 class Declaration(models.Model):
@@ -72,6 +72,12 @@ class Declaration(models.Model):
     tax_period_start = models.DateField()
     tax_period_end = models.DateField()
     client_reference = models.CharField(max_length=100, blank=True, help_text="External Client ID or Business Name")
+
+    # --- NEW FIELDS ---
+    first_name = models.CharField(max_length=150, verbose_name="Client First Name", blank=True)
+    last_name = models.CharField(max_length=150, verbose_name="Client Last Name", blank=True)
+    # --- END NEW FIELDS ---
+
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='DRAFT')
 
     def __str__(self):
@@ -84,7 +90,7 @@ class Declaration(models.Model):
 
 # ====================================================================
 # 3. STATEMENT METADATA
-#    Tracks individual files, linked to a Declaration.
+#    (No changes here)
 # ====================================================================
 
 class Statement(models.Model):
@@ -111,6 +117,10 @@ class Statement(models.Model):
         verbose_name_plural = "Statement Files"
         ordering = ['-upload_date']
 
+# ====================================================================
+# 4. DECLARATION POINT
+#    (MODIFIED: Added is_auto_filled)
+# ====================================================================
 class DeclarationPoint(models.Model):
     """
     Master data table for consistent tax declaration categories/points.
@@ -118,6 +128,14 @@ class DeclarationPoint(models.Model):
     name = models.CharField(max_length=255, unique=True, verbose_name="Tax Category Name")
     description = models.TextField(blank=True, verbose_name="Notes/Tax Instruction")
     is_income = models.BooleanField(default=True, verbose_name="Is this an Income Category?")
+
+    # --- NEW FIELD ---
+    is_auto_filled = models.BooleanField(
+        default=False,
+        verbose_name="Automatically filled by tax authority",
+        help_text="Check if this point is pre-filled by tax authorities and not based on transactions."
+    )
+    # --- END NEW FIELD ---
 
     def __str__(self):
         return self.name
@@ -129,8 +147,8 @@ class DeclarationPoint(models.Model):
 
 
 # ====================================================================
-# 4. TAX RULES
-#    Stores the dynamic conditions for automated matching.
+# 5. TAX RULES
+#    (No changes here - this is for the *main* categorization)
 # ====================================================================
 
 class TaxRule(models.Model):
@@ -148,7 +166,7 @@ class TaxRule(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_rules')
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # --- NEW FIELD: Link to Declaration (Optional) ---
+    # --- Link to Declaration (Optional) ---
     declaration = models.ForeignKey(
         Declaration,
         on_delete=models.CASCADE, # If declaration is deleted, delete its specific rules
@@ -158,12 +176,10 @@ class TaxRule(models.Model):
         verbose_name="Specific Declaration (if not global)"
     )
 
-    # --- NEW FIELD: Proposal Status ---
+    # --- Proposal Status ---
     PROPOSAL_STATUS_CHOICES = (
         ('NONE', 'Not Proposed'),
         ('PENDING_GLOBAL', 'Pending Global Approval'),
-        # ('APPROVED_GLOBAL', 'Approved as Global'), # Optional: Mark approved ones
-        # ('REJECTED_GLOBAL', 'Rejected as Global'), # Optional: Mark rejected ones
     )
     proposal_status = models.CharField(
         max_length=20,
@@ -171,7 +187,6 @@ class TaxRule(models.Model):
         default='NONE',
         verbose_name="Global Proposal Status"
     )
-    # --- END NEW FIELDS ---
 
 
     def __str__(self):
@@ -179,22 +194,36 @@ class TaxRule(models.Model):
         return f"P{self.priority}: {self.rule_name} ({scope})"
 
     class Meta:
-        verbose_name = "Tax Rule"
-        verbose_name_plural = "Tax Rules"
+        verbose_name = "Tax Rule (Category)"
+        verbose_name_plural = "Tax Rules (Category)"
         # Ensure uniqueness for global rules OR within a specific declaration
         unique_together = ('declaration', 'rule_name') # Rule names must be unique within a declaration or globally
         ordering = ['priority', 'rule_name']
 
 
 # ====================================================================
-# 5. TRANSACTION DATA
-#    Stores every incoming transaction record.
+# 6. TRANSACTION DATA
+#    (MODIFIED: Added entity_type and transaction_scope)
 # ====================================================================
 
 class Transaction(models.Model):
     """
     Universal table storing all incoming financial transactions.
     """
+
+    # --- NEW: Choices for new fields ---
+    ENTITY_CHOICES = (
+        ('UNDETERMINED', 'Not Determined'),
+        ('INDIVIDUAL', 'Individual (Not Legal Entity)'),
+        ('LEGAL', 'Legal Entity'),
+    )
+
+    SCOPE_CHOICES = (
+        ('UNDETERMINED', 'Not Determined'),
+        ('LOCAL', 'Local'),
+        ('INTERNATIONAL', 'International'),
+    )
+    # --- END NEW ---
 
     statement = models.ForeignKey(Statement, on_delete=models.CASCADE, related_name='transactions')
 
@@ -209,13 +238,28 @@ class Transaction(models.Model):
 
     # Analysis Result
     matched_rule = models.ForeignKey(TaxRule, on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions')
-    declaration_point = models.ForeignKey( # CHANGED
-        DeclarationPoint,                  # CHANGED
-        on_delete=models.SET_NULL,         # CHANGED
-        null=True,                         # CHANGED
+    declaration_point = models.ForeignKey(
+        DeclarationPoint,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         help_text="The tax category assigned by a rule or manual resolution."
     )
+
+    # --- NEW FIELDS ---
+    entity_type = models.CharField(
+        max_length=20,
+        choices=ENTITY_CHOICES,
+        default='UNDETERMINED',
+        verbose_name="Entity Type"
+    )
+    transaction_scope = models.CharField(
+        max_length=20,
+        choices=SCOPE_CHOICES,
+        default='UNDETERMINED',
+        verbose_name="Transaction Scope"
+    )
+    # --- END NEW FIELDS ---
 
     def __str__(self):
         return f"{self.transaction_date.date()} - {self.amount} {self.currency}"
@@ -227,8 +271,8 @@ class Transaction(models.Model):
 
 
 # ====================================================================
-# 6. UNMATCHED TRANSACTIONS
-#    Queue for manual user review and system learning.
+# 7. UNMATCHED TRANSACTIONS
+#    (No changes here)
 # ====================================================================
 
 class UnmatchedTransaction(models.Model):
@@ -268,3 +312,88 @@ class UnmatchedTransaction(models.Model):
         verbose_name = "Unmatched Transaction"
         verbose_name_plural = "Unmatched Transactions"
         ordering = ['status']
+
+
+# ====================================================================
+# 8. NEW RULE MODELS
+#    (NEW: As requested for separate rule engines)
+# ====================================================================
+
+class EntityTypeRule(models.Model):
+    """
+    Defines a rule for flagging a transaction's Entity Type (Legal/Individual).
+    """
+    rule_name = models.CharField(max_length=255)
+    priority = models.IntegerField(default=100, help_text="Lower number means higher priority.")
+
+    # The result this rule will apply
+    entity_type_result = models.CharField(
+        max_length=20,
+        choices=Transaction.ENTITY_CHOICES,
+        default='UNDETERMINED',
+        verbose_name="Resulting Entity Type"
+    )
+
+    conditions_json = models.JSONField(help_text="JSON array defining field checks and logic.")
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_entity_rules')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    declaration = models.ForeignKey(
+        Declaration,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='specific_entity_rules',
+        verbose_name="Specific Declaration (if not global)"
+    )
+
+    def __str__(self):
+        scope = f"Decl: {self.declaration.pk}" if self.declaration else "Global"
+        return f"P{self.priority}: {self.rule_name} -> {self.entity_type_result} ({scope})"
+
+    class Meta:
+        verbose_name = "Rule (Entity Type)"
+        verbose_name_plural = "Rules (Entity Type)"
+        unique_together = ('declaration', 'rule_name')
+        ordering = ['priority', 'rule_name']
+
+
+class TransactionScopeRule(models.Model):
+    """
+    Defines a rule for flagging a transaction's Scope (Local/International).
+    """
+    rule_name = models.CharField(max_length=255)
+    priority = models.IntegerField(default=100, help_text="Lower number means higher priority.")
+
+    # The result this rule will apply
+    scope_result = models.CharField(
+        max_length=20,
+        choices=Transaction.SCOPE_CHOICES,
+        default='UNDETERMINED',
+        verbose_name="Resulting Scope"
+    )
+
+    conditions_json = models.JSONField(help_text="JSON array defining field checks and logic.")
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_scope_rules')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    declaration = models.ForeignKey(
+        Declaration,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='specific_scope_rules',
+        verbose_name="Specific Declaration (if not global)"
+    )
+
+    def __str__(self):
+        scope = f"Decl: {self.declaration.pk}" if self.declaration else "Global"
+        return f"P{self.priority}: {self.rule_name} -> {self.scope_result} ({scope})"
+
+    class Meta:
+        verbose_name = "Rule (Transaction Scope)"
+        verbose_name_plural = "Rules (Transaction Scope)"
+        unique_together = ('declaration', 'rule_name')
+        ordering = ['priority', 'rule_name']

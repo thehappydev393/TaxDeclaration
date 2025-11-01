@@ -14,14 +14,46 @@ class DeclarationPointChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         description_preview = obj.description[:50]; return f"{obj.name} - {description_preview}..."
 
-# --- (Keep StatementUploadForm as is) ---
+# --- (MODIFIED: StatementUploadForm) ---
 class StatementUploadForm(forms.Form):
-    # ... (fields) ...
-    client_name = forms.CharField(max_length=100, label="Հաճախորդի անվանումը", help_text="Վերնագրի համար:")
-    year = forms.IntegerField(label="Հարկային Տարի", initial=date.today().year, min_value=2020, max_value=2099, help_text="Հայտարարագիրը կներառի ընթացիկ տարին գումարած հաջորդ տարվա հունվարի 31-ը:")
-    statement_files = forms.FileField(label="Բանկային քաղվածքի ֆայլեր (Excel կամ PDF)", widget=forms.FileInput, required=False, help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF):")
+    client_name = forms.CharField(
+        max_length=100,
+        label="Հաճախորդի անվանումը (Ընկերություն կամ Անհատ)", # Client Name (Company or Individual)
+        help_text="Օրինակ՝ «Սարմեն» ՍՊԸ կամ Պողոս Պողոսյան" # e.g. "Sarmen" LLC or Poghos Poghosyan
+    )
+    first_name = forms.CharField(
+        max_length=150,
+        label="Հաճախորդի Անուն", # Client First Name
+        required=True
+    )
+    last_name = forms.CharField(
+        max_length=150,
+        label="Հաճախորդի Ազգանուն", # Client Last Name
+        required=True
+    )
+    year = forms.IntegerField(
+        label="Հարկային Տարի", # Tax Year
+        initial=date.today().year,
+        min_value=2020,
+        max_value=2099,
+        help_text="Հայտարարագիրը կներառի ընթացիկ տարին գումարած հաջորդ տարվա հունվարի 31-ը:"
+    )
+    statement_files = forms.FileField(
+        label="Բանկային քաղվածքի ֆայլեր (Excel կամ PDF)",
+        widget=forms.FileInput,
+        required=False,
+        help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF):"
+    )
+
+    # Re-order fields for logical display
+    field_order = ['client_name', 'first_name', 'last_name', 'year', 'statement_files']
+
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs); self.fields['statement_files'].widget.attrs.update({'multiple': 'multiple'})
+        super().__init__(*args, **kwargs)
+        self.fields['statement_files'].widget.attrs.update({'multiple': 'multiple'})
+        # Reorder fields if field_order is defined
+        if hasattr(self, 'field_order'):
+            self.order_fields(self.field_order)
 
 
 # --- (Keep ConditionForm, BaseConditionFormSet as they are) ---
@@ -33,35 +65,34 @@ class ConditionForm(forms.Form):
     value = forms.CharField(label="Արժեք", widget=forms.TextInput(attrs={'class': 'condition-value', 'placeholder': 'Մուտքագրեք արժեքը...'}))
 BaseConditionFormSet = formset_factory(ConditionForm, extra=0, can_delete=True)
 
-# --- TaxRuleForm MODIFIED ---
+# --- (Keep TaxRuleForm as is) ---
 class TaxRuleForm(forms.ModelForm):
-    # Make fields required=False so browser validation doesn't block submission
-    # when the form is hidden. We will enforce requirement in the view conditionally.
+    # ... (no changes to this form) ...
     declaration_point = DeclarationPointChoiceField(
         queryset=DeclarationPoint.objects.all().order_by('name'),
         label="Հայտարարագրման Կետ (Category)",
         help_text="Ընտրեք այն կատեգորիան, որին կփոխանցվեն համապատասխան գործարքները։",
-        required=False # MODIFIED
+        required=False
     )
     logic = forms.ChoiceField(
-        choices=[('AND', 'Համընկնում են ԲՈԼՈՐ պայմանները (AND)'), ('OR', 'Համընկնում է ՑԱՆԿԱՑԱԾ պայման (OR)'),],
+        choices=[('AND', 'Համընկնում են ԲՈԼՈՐ պայմանները (AND)'), ('OR', 'Համընկնում է ՑԱՆԿԱՑԾ պայման (OR)'),],
         label="Կանոնի Տրամաբանություն",
         help_text="Ինչպես պետք է համակցվեն ստորև նշված պայմանները:",
-        required=False # MODIFIED (Logic isn't needed if no conditions)
+        required=False
     )
     rule_name = forms.CharField(
         max_length=255,
         label="Կանոնի Անվանում",
         help_text="Տվեք հիշվող անուն այս կանոնին:",
         widget=forms.TextInput(attrs={'placeholder': 'Օրինակ՝ Ամսական Աշխատավարձ'}),
-        required=False # MODIFIED
+        required=False
     )
     priority = forms.IntegerField(
         initial=50, min_value=1, max_value=100,
         label="Կանոնի Առաջնահերթություն",
         help_text="Ցածր թիվը նշանակում է ավելի բարձր առաջնահերթություն (1-100)։",
         widget=forms.NumberInput(attrs={'min': 1, 'max': 100}),
-        required=False # MODIFIED
+        required=False
     )
     is_active = forms.BooleanField(initial=True, required=False, label="Ակտիվ")
 
@@ -70,10 +101,9 @@ class TaxRuleForm(forms.ModelForm):
         fields = ['rule_name', 'priority', 'declaration_point', 'logic', 'is_active']
 
 
-# -----------------------------------------------------------
-# 3. Resolution Form (Unchanged from previous version)
-# -----------------------------------------------------------
+# --- (Keep ResolutionForm, AddStatementsForm, TransactionEditForm as they are) ---
 class ResolutionForm(forms.Form):
+    # ... (no changes) ...
     ACTION_CHOICES = [('resolve_only', 'Միայն Լուծել'), ('create_specific', 'Լուծել և Ստեղծել Հատուկ Կանոն'), ('propose_global', 'Լուծել և Առաջարկել Գլոբալ Կանոն'),]
     resolved_point = DeclarationPointChoiceField(queryset=DeclarationPoint.objects.all().order_by('name'), label="Վերջնական Հարկային Հայտարարագրման Կետ", help_text="Ընտրեք այն կատեգորիան, որին պետք է դասել այս գործարքը։")
     rule_action = forms.ChoiceField(choices=ACTION_CHOICES, widget=forms.RadioSelect, initial='resolve_only', label="Կանոնի Գործողություն", help_text="Ընտրեք՝ ինչպես վարվել այս լուծման հետ կանոնների առումով։")
@@ -81,7 +111,7 @@ class ResolutionForm(forms.Form):
     unmatched_id = forms.IntegerField(widget=forms.HiddenInput())
 
 class AddStatementsForm(forms.Form):
-    """Simple form to upload additional statements to an existing Declaration."""
+    # ... (no changes) ...
     statement_files = forms.FileField(
         label="Նոր Բանկային Քաղվածք(ներ)", # New Bank Statement(s)
         required=True, # Must upload at least one file
@@ -89,14 +119,13 @@ class AddStatementsForm(forms.Form):
     )
 
 class TransactionEditForm(forms.Form):
-    """Form to edit the assignment of a single transaction."""
+    # ... (no changes) ...
     declaration_point = DeclarationPointChoiceField(
         queryset=DeclarationPoint.objects.all().order_by('name'),
         label="Նշանակված Հայտարարագրման Կետ", # Assigned Declaration Point
         help_text="Ընտրեք նոր կետ կամ թողեք դատարկ՝ վերադարձնելու համար։", # Select new point or leave blank to revert.
         required=False # Allow blank selection to revert
     )
-
     revert_to_pending = forms.BooleanField(
         required=False,
         label="Վերադարձնել «Սպասում է Վերանայման» կարգավիճակին", # Revert to 'Pending Review' status
