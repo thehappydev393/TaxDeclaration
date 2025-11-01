@@ -18,9 +18,10 @@ from .parser_logic import (
 def import_statement_service(uploaded_file, declaration_obj: Declaration, user: User):
     """
     Handles file saving, parsing, normalization, and saving transactions to the DB.
+    (MODIFIED: to include is_expense)
     """
 
-    # --- 1. Prepare File Content ---
+    # --- 1. Prepare File Content (unchanged) ---
     filename = uploaded_file.name
     file_content = uploaded_file.read()
 
@@ -34,42 +35,34 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
 
     try:
         with transaction.atomic():
-            # --- 2. Run Pre-Parsing Logic (Bank ID, Header Index) ---
-
-            # 2a. Content for Search
+            # --- 2. Run Pre-Parsing Logic (unchanged) ---
             file_content_for_search = extract_full_content_for_search(filepath, ext)
-
             if isinstance(file_content_for_search, list):
                 search_content = ' '.join(file_content_for_search)
             else:
                 search_content = file_content_for_search
-
             bank_name = identify_bank_from_text(search_content)
             header_index = find_header_start_index(file_content_for_search, ext)
-
-            # 2b. Determine Content Source for Parsing
             if ext in ('.xls', '.xlsx'):
-                # Pass BytesIO object for Excel processing (In-Memory Processing)
                 content_source = io.BytesIO(file_content)
             else:
-                # Pass file path for PDF/Camelot processing
                 content_source = filepath
 
-            # 3. Call parse_transactions (CRITICAL FIX: Removing 'content_for_search')
+            # 3. Call parse_transactions (unchanged)
             df_transactions = parse_transactions(
                 content_source,
                 ext,
                 bank_name,
-                header_index, # Pass the resolved header index
+                header_index,
                 filename
             )
             df_universal = normalize_transactions(df_transactions, bank_name, filename)
 
-
+            # This check is now for *all* transactions, not just incoming
             if df_universal.empty:
-                return 0, f"File {filename}: No incoming transactions found after parsing and filtering."
+                return 0, f"File {filename}: No transactions (in or out) found after parsing."
 
-            # --- 4. Database Saving Logic ---
+            # --- 4. Database Saving Logic (MODIFIED) ---
             statement = Statement.objects.create(
                 declaration=declaration_obj,
                 file_name=filename,
@@ -89,21 +82,22 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
                         description=row['Description'],
                         sender=row['Sender'],
                         sender_account=row['Sender account number'],
+                        is_expense=row['is_expense'] # <-- NEW FIELD
                     )
                 )
 
             transactions_count = len(transaction_objects)
             Transaction.objects.bulk_create(transaction_objects)
 
-            return transactions_count, f"Successfully imported {transactions_count} transactions."
+            return transactions_count, f"Successfully imported {transactions_count} transactions (in and out)."
+            # --- END MODIFICATION ---
 
     except Exception as e:
-        # Log the error and return failure message
         print(f"IMPORT CRITICAL ERROR for {filename}: {e}")
         return 0, f"Import failed due to internal error: {e}"
 
     finally:
-        # --- 5. Clean up the temporary file (Handling WinError 32) ---
+        # --- 5. Clean up (unchanged) ---
         if default_storage.exists(temp_path):
              try:
                  default_storage.delete(temp_path)
