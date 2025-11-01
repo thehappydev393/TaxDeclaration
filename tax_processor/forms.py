@@ -3,7 +3,10 @@
 from django import forms
 from django.forms import formset_factory
 from datetime import date
-from .models import Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction
+from .models import (
+    Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction,
+    EntityTypeRule, TransactionScopeRule, Transaction
+)
 
 # --- (Keep Helper Widgets and DeclarationPointChoiceField as they are) ---
 class UnescapedTextarea(forms.Textarea):
@@ -14,8 +17,9 @@ class DeclarationPointChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         description_preview = obj.description[:50]; return f"{obj.name} - {description_preview}..."
 
-# --- (MODIFIED: StatementUploadForm) ---
+# --- (Keep StatementUploadForm as is) ---
 class StatementUploadForm(forms.Form):
+    # ... (no changes) ...
     client_name = forms.CharField(
         max_length=100,
         label="Հաճախորդի անվանումը (Ընկերություն կամ Անհատ)", # Client Name (Company or Individual)
@@ -44,14 +48,10 @@ class StatementUploadForm(forms.Form):
         required=False,
         help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF):"
     )
-
-    # Re-order fields for logical display
     field_order = ['client_name', 'first_name', 'last_name', 'year', 'statement_files']
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['statement_files'].widget.attrs.update({'multiple': 'multiple'})
-        # Reorder fields if field_order is defined
         if hasattr(self, 'field_order'):
             self.order_fields(self.field_order)
 
@@ -65,15 +65,10 @@ class ConditionForm(forms.Form):
     value = forms.CharField(label="Արժեք", widget=forms.TextInput(attrs={'class': 'condition-value', 'placeholder': 'Մուտքագրեք արժեքը...'}))
 BaseConditionFormSet = formset_factory(ConditionForm, extra=0, can_delete=True)
 
-# --- (Keep TaxRuleForm as is) ---
-class TaxRuleForm(forms.ModelForm):
-    # ... (no changes to this form) ...
-    declaration_point = DeclarationPointChoiceField(
-        queryset=DeclarationPoint.objects.all().order_by('name'),
-        label="Հայտարարագրման Կետ (Category)",
-        help_text="Ընտրեք այն կատեգորիան, որին կփոխանցվեն համապատասխան գործարքները։",
-        required=False
-    )
+
+# --- NEW: Base Form for all Rule Types ---
+class BaseRuleForm(forms.ModelForm):
+    """A shared base form for all rule types to reduce duplication."""
     logic = forms.ChoiceField(
         choices=[('AND', 'Համընկնում են ԲՈԼՈՐ պայմանները (AND)'), ('OR', 'Համընկնում է ՑԱՆԿԱՑԾ պայման (OR)'),],
         label="Կանոնի Տրամաբանություն",
@@ -96,12 +91,52 @@ class TaxRuleForm(forms.ModelForm):
     )
     is_active = forms.BooleanField(initial=True, required=False, label="Ակտիվ")
 
+
+# --- MODIFIED: TaxRuleForm now inherits from BaseRuleForm ---
+class TaxRuleForm(BaseRuleForm):
+    declaration_point = DeclarationPointChoiceField(
+        queryset=DeclarationPoint.objects.all().order_by('name'),
+        label="Հայտարարագրման Կետ (Category)",
+        help_text="Ընտրեք այն կատեգորիան, որին կփոխանցվեն համապատասխան գործարքները։",
+        required=False
+    )
+
     class Meta:
         model = TaxRule
         fields = ['rule_name', 'priority', 'declaration_point', 'logic', 'is_active']
 
 
-# --- (Keep ResolutionForm, AddStatementsForm, TransactionEditForm as they are) ---
+# --- NEW: EntityTypeRuleForm ---
+class EntityTypeRuleForm(BaseRuleForm):
+    entity_type_result = forms.ChoiceField(
+        choices=Transaction.ENTITY_CHOICES,
+        label="Արդյունքի Իրավական Կարգավիճակ", # Resulting Entity Type
+        help_text="Եթե կանոնը համընկնի, գործարքին կտրվի այս կարգավիճակը:",
+        required=False
+    )
+
+    class Meta:
+        model = EntityTypeRule
+        fields = ['rule_name', 'priority', 'entity_type_result', 'logic', 'is_active']
+
+
+# --- NEW: TransactionScopeRuleForm ---
+class TransactionScopeRuleForm(BaseRuleForm):
+    scope_result = forms.ChoiceField(
+        choices=Transaction.SCOPE_CHOICES,
+        label="Արդյունքի Տարածք", # Resulting Scope
+        help_text="Եթե կանոնը համընկնի, գործարքին կտրվի այս կարգավիճակը:",
+        required=False
+    )
+
+    class Meta:
+        model = TransactionScopeRule
+        fields = ['rule_name', 'priority', 'scope_result', 'logic', 'is_active']
+
+
+# -----------------------------------------------------------
+# 3. Resolution Form (Unchanged)
+# -----------------------------------------------------------
 class ResolutionForm(forms.Form):
     # ... (no changes) ...
     ACTION_CHOICES = [('resolve_only', 'Միայն Լուծել'), ('create_specific', 'Լուծել և Ստեղծել Հատուկ Կանոն'), ('propose_global', 'Լուծել և Առաջարկել Գլոբալ Կանոն'),]
@@ -113,21 +148,21 @@ class ResolutionForm(forms.Form):
 class AddStatementsForm(forms.Form):
     # ... (no changes) ...
     statement_files = forms.FileField(
-        label="Նոր Բանկային Քաղվածք(ներ)", # New Bank Statement(s)
-        required=True, # Must upload at least one file
-        help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF) ավելացնելու համար։" # Select one or more... to add.
+        label="Նոր Բանկային Քաղվածք(ներ)",
+        required=True,
+        help_text="Ընտրեք մեկ կամ մի քանի քաղվածքի ֆայլեր (Excel կամ PDF) ավելացնելու համար։"
     )
 
 class TransactionEditForm(forms.Form):
     # ... (no changes) ...
     declaration_point = DeclarationPointChoiceField(
         queryset=DeclarationPoint.objects.all().order_by('name'),
-        label="Նշանակված Հայտարարագրման Կետ", # Assigned Declaration Point
-        help_text="Ընտրեք նոր կետ կամ թողեք դատարկ՝ վերադարձնելու համար։", # Select new point or leave blank to revert.
-        required=False # Allow blank selection to revert
+        label="Նշանակված Հայտարարագրման Կետ",
+        help_text="Ընտրեք նոր կետ կամ թողեք դատարկ՝ վերադարձնելու համար։",
+        required=False
     )
     revert_to_pending = forms.BooleanField(
         required=False,
-        label="Վերադարձնել «Սպասում է Վերանայման» կարգավիճակին", # Revert to 'Pending Review' status
-        help_text="Նշեք այս վանդակը՝ գործարքը վերանայման հերթ վերադարձնելու համար (կջնջի ընթացիկ նշանակումը)։" # Check this box to return the transaction to the review queue (will clear current assignment).
+        label="Վերադարձնել «Սպասում է Վերանայման» կարգավիճակին",
+        help_text="Նշեք այս վանդակը՝ գործարքը վերանայման հերթ վերադարձնելու համար (կջնջի ընթացիկ նշանակումը)։"
     )

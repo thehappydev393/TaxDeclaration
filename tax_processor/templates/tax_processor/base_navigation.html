@@ -12,7 +12,9 @@
     }
     .nav-links {
         display: flex;
+        align-items: center; /* NEW: Align items vertically */
         gap: 15px;
+        flex-wrap: wrap; /* NEW: Allow wrapping on small screens */
     }
     .nav-links a, .nav-links .nav-link-btn {
         color: white;
@@ -43,6 +45,7 @@
         border-left: 1px solid #6c757d;
         margin-left: 10px;
         padding-left: 15px;
+        flex-wrap: wrap; /* NEW: Allow wrapping */
     }
     .nav-admin-links a {
         background-color: #6c757d;
@@ -54,6 +57,7 @@
     .nav-user {
         color: #e9ecef;
         font-size: 0.9em;
+        white-space: nowrap; /* NEW: Prevent user section from wrapping */
     }
     @keyframes pulse {
         0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
@@ -73,7 +77,9 @@
 
         {% if is_admin %}
         <div class="nav-admin-links">
-            <a href="{% url 'rule_list_global' %}">Գլոբալ Կանոններ</a>
+            <a href="{% url 'rule_list_global' %}">Կատեգորիայի Կանոններ</a>
+            <a href="{% url 'entity_rule_list_global' %}">Իրավականի Կանոններ</a>
+            <a href="{% url 'scope_rule_list_global' %}">Տարածքի Կանոններ</a>
             <a href="{% url 'review_global_proposals' %}" class="{% if pending_global_rules_count > 0 %}nav-btn-alert{% endif %}">
                 Գլոբալ Առաջարկներ ({{ pending_global_rules_count|default:0 }})
             </a>

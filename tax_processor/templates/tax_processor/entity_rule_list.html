@@ -1,0 +1,191 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ list_title }}</title>
+    <style>
+        /* (Styles copied from rule_list.html) */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 15px; }
+        h2 { font-size: 1.6em; color: #495057; margin-bottom: 20px; margin-top: 0; }
+        .filter-form { margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; display: grid; grid-template-columns: 2fr 1fr auto; gap: 10px; align-items: flex-end; }
+        .filter-form .form-group { display: flex; flex-direction: column; }
+        .filter-form label { font-weight: 600; font-size: 0.85em; margin-bottom: 5px; color: #495057; }
+        .filter-form input[type="text"], .filter-form select { padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .filter-form .btn-group { display: flex; gap: 5px; }
+        .filter-form button { padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .filter-form a { padding: 8px 15px; background-color: #6c757d; color: white; border-radius: 4px; text-decoration: none; font-size: 0.9em; text-align: center; box-sizing: border-box; }
+        .action-bar { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .create-btn { background-color: #28a745; color: white; padding: 10px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; transition: background-color 0.2s; }
+        .create-btn:hover { background-color: #1e7e34; }
+        .nav-link { color: #007bff; text-decoration: none; }
+        .messages { list-style: none; padding: 0; margin-bottom: 20px; }
+        .messages li { padding: 10px 15px; border-radius: 4px; margin-bottom: 10px; font-weight: 500; }
+        .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .messages .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.95em; }
+        th { background-color: #343a40; color: white; font-weight: 600; }
+        th a { color: inherit; text-decoration: none; }
+        th a:hover { text-decoration: underline; }
+        .sort-asc::after { content: " ▲"; font-size: 0.8em; }
+        .sort-desc::after { content: " ▼"; font-size: 0.8em; }
+        tr:hover { background-color: #f8f9fa; }
+        .priority-high { color: #dc3545; font-weight: bold; }
+        .priority-low { color: #6c757d; }
+        .status-active { color: #28a745; font-weight: bold; }
+        .status-inactive { color: #dc3545; }
+        .action-links a { color: #007bff; text-decoration: none; margin-right: 10px; }
+        .action-links button { border: none; background: none; cursor: pointer; padding: 0; font-size: 0.95em; vertical-align: middle; }
+        .action-links .delete-btn { color: red; }
+        .pagination { margin-top: 25px; text-align: center; }
+        .pagination a, .pagination .current { display: inline-block; padding: 6px 12px; margin: 0 2px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #007bff; }
+        .pagination .current { background-color: #007bff; color: white; border-color: #007bff; }
+        .pagination a:hover { background-color: #f0f0f0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    {% include "tax_processor/base_navigation.html" %}
+
+    <h1>{{ list_title }}</h1>
+    {% if not is_global_list and declaration %}
+    <h2>Հայտարարագիր։ {{ declaration.name }}</h2>
+    {% endif %}
+
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="action-bar">
+        {% if is_global_list %}
+        <a href="{% url 'entity_rule_create_global' %}" class="create-btn">+ Ստեղծել Նոր Գլոբալ Կանոն</a>
+        {% elif declaration %}
+        <a href="{% url 'entity_rule_create_specific' declaration.id %}" class="create-btn">+ Ստեղծել Նոր Հատուկ Կանոն</a>
+        {% endif %}
+
+        {% if not is_global_list and declaration %}
+        <div>
+            <a href="{% url 'declaration_detail' declaration.id %}" class="nav-link">← Վերադառնալ Հայտարարագրի Մանրամասներ</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <form method="get" action="" class="filter-form">
+        <div class="form-group">
+            <label for="q">Որոնել</label>
+            <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Որոնել անունով...">
+        </div>
+        <div class="form-group">
+            <label for="filter_active">Ակտիվ</label>
+            <select name="filter_active" id="filter_active">
+                <option value="">Բոլորը</option>
+                <option value="true" {% if filter_active == 'true' %}selected{% endif %}>Այո</option>
+                <option value="false" {% if filter_active == 'false' %}selected{% endif %}>Ոչ</option>
+            </select>
+        </div>
+        <div class="btn-group">
+            <button type="submit">Որոնել</button>
+            <a href="{% if is_global_list %}{% url 'entity_rule_list_global' %}{% else %}{% url 'entity_rule_list_specific' declaration.id %}{% endif %}">Մաքրել</a>
+        </div>
+    </form>
+
+    <table>
+        <thead>
+        <tr>
+            <th>
+                <a href="?sort={% if current_sort == 'priority' %}-{% endif %}priority&{{ get_params }}"
+                   class="{% if 'priority' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Առաջնահերթություն
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'rule_name' %}-{% endif %}rule_name&{{ get_params }}"
+                   class="{% if 'rule_name' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Կանոնի Անվանում
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'entity_type_result' %}-{% endif %}entity_type_result&{{ get_params }}"
+                   class="{% if 'entity_type_result' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Արդյունք
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'is_active' %}-{% endif %}is_active&{{ get_params }}"
+                   class="{% if 'is_active' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Ակտիվ
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'created_at' %}-{% endif %}created_at&{{ get_params }}"
+                   class="{% if 'created_at' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Ստեղծվել է
+                </a>
+            </th>
+            <th>Գործողություններ</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for rule in rules %}
+        <tr>
+            <td class="{% if rule.priority <= 20 %}priority-high{% else %}priority-low{% endif %}">{{ rule.priority }}</td>
+            <td>{{ rule.rule_name }}</td>
+            <td>{{ rule.get_entity_type_result_display }}</td>
+            <td class="{% if rule.is_active %}status-active{% else %}status-inactive{% endif %}">{% if rule.is_active %}✅ Այո{% else %}❌ Ոչ{% endif %}</td>
+            <td>{{ rule.created_at|date:"Y-m-d" }} ({{ rule.created_by.username|default:"unknown" }})</td>
+            <td class="action-links">
+                {% if is_global_list %}
+                <a href="{% url 'entity_rule_update_global' rule.id %}" target="_blank">Խմբագրել</a> |
+                <form method="post" action="{% url 'entity_rule_delete_global' rule.id %}" style="display: inline;" onsubmit="return confirm('Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս գլոբալ կանոնը։');">
+                    {% csrf_token %}
+                    <button type="submit" class="delete-btn">Ջնջել</button>
+                </form>
+                {% elif declaration %}
+                <a href="{% url 'entity_rule_update_specific' declaration.id rule.id %}" target="_blank">Խմբագրել</a> |
+                <form method="post" action="{% url 'entity_rule_delete_specific' declaration.id rule.id %}" style="display: inline;" onsubmit="return confirm('Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս կանոնը։');">
+                    {% csrf_token %}
+                    <button type="submit" class="delete-btn">Ջնջել</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6" style="text-align: center; color: #6c757d;">
+                {% if search_query or filter_active %}
+                Որոնմանը/ֆիլտրին համապատասխանող կանոններ չեն գտնվել։
+                {% else %}
+                Կանոններ դեռևս սահմանված չեն։
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page=1&{{ get_params }}">&laquo; Առաջին</a>
+        <a href="?page={{ page_obj.previous_page_number }}&{{ get_params }}">Նախորդ</a>
+        {% endif %}
+        <span class="current">
+            Էջ {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}.
+        </span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&{{ get_params }}">Հաջորդ</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}&{{ get_params }}">Վերջին &raquo;</a>
+        {% endif %}
+    </div>
+
+</div>
+</body>
+</html>

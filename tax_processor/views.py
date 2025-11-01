@@ -7,7 +7,12 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Q, Count, Sum
 from django.utils import timezone
-from .forms import StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet, AddStatementsForm, TransactionEditForm
+# --- UPDATED: Import new forms ---
+from .forms import (
+    StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet,
+    AddStatementsForm, TransactionEditForm, EntityTypeRuleForm, TransactionScopeRuleForm
+)
+# --- END UPDATED ---
 from .services import import_statement_service
 from .rules_engine import RulesEngine
 from .entity_type_rules_engine import EntityTypeRulesEngine
@@ -28,7 +33,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 BANK_NAMES_LIST = sorted(list(BANK_KEYWORDS.keys()))
 
 # -----------------------------------------------------------
-# 1. PERMISSION HELPERS (Unchanged)
+# 1. PERMISSION HELPERS
 # -----------------------------------------------------------
 def is_superadmin(user):
     return user.is_authenticated and hasattr(user, 'profile') and user.profile.role == 'SUPERADMIN'
@@ -37,11 +42,10 @@ def is_permitted_user(user):
     return user.is_authenticated and hasattr(user, 'profile') and user.profile.role in ['SUPERADMIN', 'REGULAR_USER']
 
 # -----------------------------------------------------------
-# 2. DATA INGESTION & DECLARATION MGMT (Unchanged)
+# 2. DATA INGESTION & DECLARATION MGMT
 # -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 def upload_statement(request):
-    # ... (no changes to this view) ...
     if request.method == 'POST':
         form = StatementUploadForm(request.POST, request.FILES)
         if form.is_valid():
@@ -94,7 +98,6 @@ def upload_statement(request):
 
 @user_passes_test(is_permitted_user)
 def add_statements_to_declaration(request, declaration_id):
-    # ... (no changes to this view) ...
     declaration = get_object_or_404(Declaration, pk=declaration_id)
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "Դուք իրավասու չեք այս Հայտարարագրին քաղվածքներ ավելացնելու։")
@@ -134,13 +137,11 @@ def add_statements_to_declaration(request, declaration_id):
 
 
 def filter_declarations_by_user(user):
-    # ... (no changes) ...
     if is_superadmin(user): return Declaration.objects.all()
     else: return Declaration.objects.filter(created_by=user)
 
 @user_passes_test(is_permitted_user)
 def declaration_detail(request, declaration_id):
-    # ... (no changes) ...
     declaration_qs = filter_declarations_by_user(request.user); declaration = get_object_or_404(declaration_qs, pk=declaration_id)
     total_statements = declaration.statements.count(); total_transactions = Transaction.objects.filter(statement__declaration=declaration).count(); unassigned_transactions = Transaction.objects.filter(statement__declaration=declaration, declaration_point__isnull=True).count()
     context = {'declaration': declaration, 'total_statements': total_statements, 'total_transactions': total_transactions, 'unassigned_transactions': unassigned_transactions, 'is_admin': is_superadmin(request.user)}
@@ -150,7 +151,6 @@ def declaration_detail(request, declaration_id):
 @user_passes_test(is_permitted_user)
 @require_POST
 def run_declaration_analysis(request, declaration_id):
-    # ... (no changes to this view) ...
     declaration = get_object_or_404(Declaration, pk=declaration_id)
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "You do not have permission to analyze this declaration.")
@@ -181,7 +181,6 @@ def run_declaration_analysis(request, declaration_id):
 @user_passes_test(is_permitted_user)
 @require_POST
 def run_analysis_pending(request, declaration_id):
-    # ... (no changes to this view) ...
     declaration = get_object_or_404(Declaration, pk=declaration_id)
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "Permission denied.")
@@ -212,79 +211,52 @@ def run_analysis_pending(request, declaration_id):
     return redirect('declaration_detail', declaration_id=declaration.pk)
 
 # -----------------------------------------------------------
-# 3. GLOBAL RULE MANAGEMENT (Superadmin Only)
-#    (MODIFIED: Added pagination, search, sort)
+# 3. GLOBAL (CATEGORY) RULE MANAGEMENT
 # -----------------------------------------------------------
 
 @user_passes_test(is_superadmin)
 def rule_list_global(request):
-    """Displays a paginated, searchable, and sortable list of all GLOBAL Tax Rules."""
     queryset = TaxRule.objects.filter(declaration__isnull=True).select_related('declaration_point', 'created_by')
-
-    # --- Search ---
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(
             Q(rule_name__icontains=search_query) |
             Q(declaration_point__name__icontains=search_query)
         )
-
-    # --- Filtering ---
     filter_active = request.GET.get('filter_active', '')
     if filter_active:
         queryset = queryset.filter(is_active=(filter_active == 'true'))
-
     filter_proposal = request.GET.get('filter_proposal', '')
     if filter_proposal:
         queryset = queryset.filter(proposal_status=filter_proposal)
-
-    # --- Sorting ---
     sort_by = request.GET.get('sort', 'priority')
     valid_sort_fields = [
-        'priority', '-priority',
-        'rule_name', '-rule_name',
-        'declaration_point__name', '-declaration_point__name',
-        'is_active', '-is_active',
-        'proposal_status', '-proposal_status',
-        'created_at', '-created_at'
+        'priority', '-priority', 'rule_name', '-rule_name', 'declaration_point__name', '-declaration_point__name',
+        'is_active', '-is_active', 'proposal_status', '-proposal_status', 'created_at', '-created_at'
     ]
     if sort_by not in valid_sort_fields:
         sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
-
-    # --- Pagination ---
-    paginator = Paginator(queryset, 25) # 25 rules per page
+    paginator = Paginator(queryset, 25)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-
-    # --- Build GET params for pagination/sorting links ---
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
-
     context = {
-        'rules': page_obj, # Pass page_obj as rules
-        'page_obj': page_obj,
-        'is_global_list': True,
-        'list_title': "Գլոբալ Կանոններ", # Global Tax Rules
-        'is_admin': True,
-        'search_query': search_query,
-        'filter_active': filter_active,
-        'filter_proposal': filter_proposal,
-        'current_sort': sort_by,
-        'get_params': get_params.urlencode()
+        'rules': page_obj, 'page_obj': page_obj, 'is_global_list': True, 'list_title': "Գլոբալ Կանոններ",
+        'is_admin': True, 'search_query': search_query, 'filter_active': filter_active,
+        'filter_proposal': filter_proposal, 'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
     return render(request, 'tax_processor/rule_list.html', context)
 
 
 @user_passes_test(is_superadmin)
 def rule_create_or_update(request, rule_id=None, declaration_id=None):
-    # ... (no changes to logic, just adding is_admin to context) ...
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
     title = ""
-
     if is_specific_rule:
         declaration = get_object_or_404(Declaration, pk=declaration_id)
         if not (is_superadmin(request.user) or declaration.created_by == request.user):
@@ -354,7 +326,7 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
         'list_url_name': list_url_name,
         'url_kwargs': url_kwargs,
         'bank_names': BANK_NAMES_LIST,
-        'is_admin': is_superadmin(request.user) # Add is_admin
+        'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/rule_form.html', context)
 
@@ -362,7 +334,6 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
 @user_passes_test(is_permitted_user)
 @require_POST
 def rule_delete(request, rule_id, declaration_id=None):
-    # ... (no changes) ...
     is_specific_rule = declaration_id is not None
     rule = None
     if is_specific_rule:
@@ -371,7 +342,7 @@ def rule_delete(request, rule_id, declaration_id=None):
              messages.error(request, "Permission denied."); return redirect('user_dashboard')
         rule = get_object_or_404(TaxRule, pk=rule_id, declaration=declaration)
         list_url_name = 'declaration_rule_list'; url_kwargs = {'declaration_id': declaration_id}
-    else: # Global rule
+    else:
         if not is_superadmin(request.user):
             messages.error(request, "Permission denied."); return redirect('user_dashboard')
         rule = get_object_or_404(TaxRule, pk=rule_id, declaration__isnull=True)
@@ -383,83 +354,57 @@ def rule_delete(request, rule_id, declaration_id=None):
 
 
 # -----------------------------------------------------------
-# 4. DECLARATION-SPECIFIC RULE LIST VIEW
-#    (MODIFIED: Added pagination, search, sort)
+# 4. DECLARATION-SPECIFIC (CATEGORY) RULE LIST VIEW
 # -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 def declaration_rule_list(request, declaration_id):
-    """Displays paginated, searchable, and sortable rules specific to a single declaration."""
     declaration = get_object_or_404(Declaration, pk=declaration_id)
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "You don't have permission to view rules for this declaration.")
         return redirect('user_dashboard')
-
     queryset = TaxRule.objects.filter(declaration=declaration).select_related('declaration_point', 'created_by')
-
-    # --- Search ---
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(
             Q(rule_name__icontains=search_query) |
             Q(declaration_point__name__icontains=search_query)
         )
-
-    # --- Filtering ---
     filter_active = request.GET.get('filter_active', '')
     if filter_active:
         queryset = queryset.filter(is_active=(filter_active == 'true'))
-
     filter_proposal = request.GET.get('filter_proposal', '')
     if filter_proposal:
         queryset = queryset.filter(proposal_status=filter_proposal)
-
-    # --- Sorting ---
     sort_by = request.GET.get('sort', 'priority')
     valid_sort_fields = [
-        'priority', '-priority',
-        'rule_name', '-rule_name',
-        'declaration_point__name', '-declaration_point__name',
-        'is_active', '-is_active',
-        'proposal_status', '-proposal_status',
-        'created_at', '-created_at'
+        'priority', '-priority', 'rule_name', '-rule_name', 'declaration_point__name', '-declaration_point__name',
+        'is_active', '-is_active', 'proposal_status', '-proposal_status', 'created_at', '-created_at'
     ]
     if sort_by not in valid_sort_fields:
         sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
-
-    # --- Pagination ---
-    paginator = Paginator(queryset, 25) # 25 rules per page
+    paginator = Paginator(queryset, 25)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-
-    # --- Build GET params for pagination/sorting links ---
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
-
     context = {
-        'rules': page_obj, # Pass page_obj as rules
-        'page_obj': page_obj,
-        'declaration': declaration,
-        'is_global_list': False,
-        'list_title': f"Կանոններ {declaration.name}-ի համար", # Rules for ...
-        'is_admin': is_superadmin(request.user),
-        'search_query': search_query,
-        'filter_active': filter_active,
-        'filter_proposal': filter_proposal,
-        'current_sort': sort_by,
-        'get_params': get_params.urlencode()
+        'rules': page_obj, 'page_obj': page_obj, 'declaration': declaration,
+        'is_global_list': False, 'list_title': f"Կանոններ {declaration.name}-ի համար",
+        'is_admin': is_superadmin(request.user), 'search_query': search_query,
+        'filter_active': filter_active, 'filter_proposal': filter_proposal,
+        'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
     return render(request, 'tax_processor/rule_list.html', context)
 
 
 # -----------------------------------------------------------
-# 5. GLOBAL RULE PROPOSAL WORKFLOW (Unchanged)
+# 5. GLOBAL RULE PROPOSAL WORKFLOW
 # -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 @require_POST
 def propose_rule_global(request, rule_id):
-    # ... (no changes) ...
     rule_query = Q(pk=rule_id) & Q(declaration__isnull=False)
     if not is_superadmin(request.user):
         rule_query &= Q(declaration__created_by=request.user)
@@ -475,7 +420,6 @@ def propose_rule_global(request, rule_id):
 
 @user_passes_test(is_superadmin)
 def review_global_proposals(request):
-    # ... (no changes, just add is_admin) ...
     proposals = TaxRule.objects.filter(proposal_status='PENDING_GLOBAL').select_related('declaration', 'declaration_point', 'created_by')
     context = {
         'proposals': proposals,
@@ -488,7 +432,6 @@ def review_global_proposals(request):
 @user_passes_test(is_superadmin)
 @require_POST
 def approve_global_proposal(request, rule_id):
-    # ... (no changes) ...
     rule = get_object_or_404(TaxRule, pk=rule_id, proposal_status='PENDING_GLOBAL')
     original_decl_id = rule.declaration_id
     new_name = rule.rule_name
@@ -505,7 +448,6 @@ def approve_global_proposal(request, rule_id):
 @user_passes_test(is_superadmin)
 @require_POST
 def reject_global_proposal(request, rule_id):
-    # ... (no changes) ...
     rule = get_object_or_404(TaxRule, pk=rule_id, proposal_status='PENDING_GLOBAL')
     rule.proposal_status = 'NONE'
     rule.save()
@@ -515,21 +457,16 @@ def reject_global_proposal(request, rule_id):
 
 # -----------------------------------------------------------
 # 6. USER DASHBOARD & REVIEW QUEUES
-#    (MODIFIED: Added search/sort/pagination to both)
 # -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 def user_dashboard(request):
-    """MODIFIED: Added search, sort, and pagination to the declarations list."""
     user = request.user
     queryset = filter_declarations_by_user(user)
-
     queryset = queryset.annotate(
         statement_count=Count('statements', distinct=True),
         total_transactions=Count('statements__transactions', distinct=True),
         unmatched_count=Count('statements__transactions__unmatched_record', filter=Q(statements__transactions__unmatched_record__status='PENDING_REVIEW'), distinct=True)
     )
-
-    # --- Search ---
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(
@@ -538,65 +475,44 @@ def user_dashboard(request):
             Q(first_name__icontains=search_query) |
             Q(last_name__icontains=search_query)
         )
-
-    # --- Filtering ---
     filter_status = request.GET.get('filter_status', '')
     if filter_status:
         queryset = queryset.filter(status=filter_status)
-
-    # --- Sorting ---
     sort_by = request.GET.get('sort', '-tax_period_start')
     valid_sort_fields = [
-        'name', '-name',
-        'tax_period_start', '-tax_period_start',
-        'statement_count', '-statement_count',
-        'total_transactions', '-total_transactions',
-        'unmatched_count', '-unmatched_count',
+        'name', '-name', 'tax_period_start', '-tax_period_start', 'statement_count', '-statement_count',
+        'total_transactions', '-total_transactions', 'unmatched_count', '-unmatched_count',
     ]
     if sort_by not in valid_sort_fields:
         sort_by = '-tax_period_start'
     queryset = queryset.order_by(sort_by)
-
-    # --- Pagination ---
-    paginator = Paginator(queryset, 25) # 25 declarations per page
+    paginator = Paginator(queryset, 25)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-
-    # --- Build GET params for pagination/sorting links ---
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
-
-    # --- Other Context ---
     pending_proposals_count = 0
     pending_global_rules_count = 0
     if is_superadmin(user):
         pending_proposals_count = UnmatchedTransaction.objects.filter(status='NEW_RULE_PROPOSED').count()
         pending_global_rules_count = TaxRule.objects.filter(proposal_status='PENDING_GLOBAL').count()
-
     context = {
-        'declarations': page_obj, # Pass page_obj as declarations
-        'page_obj': page_obj,
-        'is_admin': is_superadmin(user),
-        'pending_proposals_count': pending_proposals_count,
-        'pending_global_rules_count': pending_global_rules_count,
-        'search_query': search_query,
-        'filter_status': filter_status,
-        'current_sort': sort_by,
-        'get_params': get_params.urlencode()
+        'declarations': page_obj, 'page_obj': page_obj, 'is_admin': is_superadmin(user),
+        'pending_proposals_count': pending_proposals_count, 'pending_global_rules_count': pending_global_rules_count,
+        'search_query': search_query, 'filter_status': filter_status,
+        'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
     return render(request, 'tax_processor/user_dashboard.html', context)
 
 
 @user_passes_test(is_permitted_user)
 def review_queue(request, declaration_id=None):
-    """MODIFIED: Added search, sort, filter, and pagination."""
     user = request.user
     queryset = UnmatchedTransaction.objects.filter(status='PENDING_REVIEW')
     is_filtered_by_declaration = False
     title = ""
     current_declaration = None
-
     if declaration_id:
         current_declaration = get_object_or_404(Declaration, pk=declaration_id)
         if not (is_superadmin(user) or current_declaration.created_by == user):
@@ -609,71 +525,48 @@ def review_queue(request, declaration_id=None):
     else:
         queryset = queryset.filter(assigned_user=user)
         title = f"{user.username}'s Pending Reviews"
-
     queryset = queryset.select_related(
         'transaction__statement__declaration',
         'transaction__matched_rule',
         'assigned_user'
     )
-
-    # --- Search ---
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(
             Q(transaction__description__icontains=search_query) |
             Q(transaction__sender__icontains=search_query)
         )
-
-    # --- Filtering (by user, only for superadmin global view) ---
     filter_user = request.GET.get('filter_user', '')
     if is_superadmin(user) and not declaration_id and filter_user:
         queryset = queryset.filter(assigned_user_id=filter_user)
-
-    # --- Sorting ---
     sort_by = request.GET.get('sort', '-transaction__transaction_date')
     valid_sort_fields = [
-        'transaction__transaction_date', '-transaction__transaction_date',
-        'transaction__amount', '-transaction__amount',
-        'transaction__description', '-transaction__description',
-        'transaction__sender', '-transaction__sender',
+        'transaction__transaction_date', '-transaction__transaction_date', 'transaction__amount', '-transaction__amount',
+        'transaction__description', '-transaction__description', 'transaction__sender', '-transaction__sender',
         'transaction__statement__declaration__name', '-transaction__statement__declaration__name',
     ]
     if sort_by not in valid_sort_fields:
         sort_by = '-transaction__transaction_date'
     queryset = queryset.order_by(sort_by)
-
-    # --- Pagination ---
-    paginator = Paginator(queryset, 25) # 25 items per page
+    paginator = Paginator(queryset, 25)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-
-    # --- Build GET params for pagination/sorting links ---
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
-
     context = {
-        'title': title,
-        'unmatched_items': page_obj, # Pass page_obj
-        'page_obj': page_obj,
-        'is_admin': is_superadmin(user),
-        'is_filtered': is_filtered_by_declaration,
-        'current_declaration': current_declaration,
-        'search_query': search_query,
-        'filter_user': filter_user,
-        'current_sort': sort_by,
-        'get_params': get_params.urlencode()
+        'title': title, 'unmatched_items': page_obj, 'page_obj': page_obj,
+        'is_admin': is_superadmin(user), 'is_filtered': is_filtered_by_declaration,
+        'current_declaration': current_declaration, 'search_query': search_query,
+        'filter_user': filter_user, 'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
-    # Get all users for the filter dropdown
     if is_superadmin(user) and not declaration_id:
         context['all_users'] = User.objects.filter(assigned_reviews__status='PENDING_REVIEW').distinct()
-
     return render(request, 'tax_processor/review_queue.html', context)
 
 
 @user_passes_test(is_permitted_user)
 def resolve_transaction(request, unmatched_id):
-    # ... (no changes to logic, just adding is_admin to context) ...
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
     tx = unmatched_item.transaction
     declaration = tx.statement.declaration
@@ -779,14 +672,13 @@ def resolve_transaction(request, unmatched_id):
         'rule_form': rule_form,
         'condition_formset': condition_formset,
         'bank_names': BANK_NAMES_LIST,
-        'is_admin': is_superadmin(request.user) # Add is_admin
+        'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/resolve_transaction.html', context)
 
 
 @user_passes_test(is_permitted_user)
 def tax_report(request, declaration_id):
-    # ... (no changes, just add is_admin) ...
     declaration_qs = filter_declarations_by_user(request.user); declaration = get_object_or_404(declaration_qs, pk=declaration_id)
     transactions_qs = Transaction.objects.filter(statement__declaration=declaration, declaration_point__isnull=False)
     report_data = transactions_qs.values('declaration_point__name', 'declaration_point__description', 'declaration_point__is_income','currency').annotate(total_amount=Sum('amount'), transaction_count=Count('pk')).order_by('declaration_point__is_income', 'declaration_point__name','currency')
@@ -795,17 +687,16 @@ def tax_report(request, declaration_id):
         'declaration': declaration,
         'report_data': report_data,
         'currency_totals': currency_totals,
-        'is_admin': is_superadmin(request.user) # Add is_admin
+        'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/tax_report.html', context)
 
 
 # -----------------------------------------------------------
-# 7. SUPERADMIN MANUAL PROPOSAL WORKFLOW (Unchanged)
+# 7. SUPERADMIN MANUAL PROPOSAL WORKFLOW
 # -----------------------------------------------------------
 @user_passes_test(is_superadmin)
 def review_proposals(request):
-    # ... (no changes, just add is_admin) ...
     proposals = UnmatchedTransaction.objects.filter(status='NEW_RULE_PROPOSED').select_related('transaction__statement__declaration', 'assigned_user').order_by('-resolution_date')
     context = {
         'proposals': proposals,
@@ -817,7 +708,6 @@ def review_proposals(request):
 
 @user_passes_test(is_superadmin)
 def finalize_rule(request, unmatched_id):
-    # ... (no changes, just add is_admin) ...
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id); transaction = unmatched_item.transaction
     if unmatched_item.status != 'NEW_RULE_PROPOSED': messages.error(request, "Not a pending proposal."); return redirect('review_proposals')
     proposal_data = unmatched_item.rule_proposal_json; proposed_category_name = proposal_data.get('resolved_point_name', 'N/A')
@@ -865,7 +755,6 @@ def finalize_rule(request, unmatched_id):
 @require_POST
 @user_passes_test(is_superadmin)
 def reject_proposal(request, unmatched_id):
-    # ... (no changes) ...
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
     if unmatched_item.status == 'NEW_RULE_PROPOSED':
         unmatched_item.status = 'PENDING_REVIEW'; unmatched_item.rule_proposal_json = None; unmatched_item.save()
@@ -875,44 +764,31 @@ def reject_proposal(request, unmatched_id):
 
 # -----------------------------------------------------------
 # 8. ALL TRANSACTIONS & EDIT
-#    (MODIFIED: all_transactions_list view)
 # -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 def all_transactions_list(request, declaration_id):
-    """
-    MODIFIED: Displays paginated, searchable, SORTABLE, and FILTERABLE list
-    of ALL transactions for a specific declaration.
-    """
     declaration = get_object_or_404(Declaration, pk=declaration_id)
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "Դուք իրավասու չեք դիտելու այս հայտարարագրի գործարքները։")
         return redirect('user_dashboard')
-
     queryset = Transaction.objects.filter(statement__declaration=declaration).select_related(
-        'declaration_point', 'matched_rule', 'unmatched_record' # Added unmatched_record
+        'declaration_point', 'matched_rule', 'unmatched_record'
     )
-
-    # --- Search ---
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(
             Q(description__icontains=search_query) |
             Q(sender__icontains=search_query)
         )
-
-    # --- Filtering ---
     filter_type = request.GET.get('filter_type', '')
     if filter_type:
         queryset = queryset.filter(is_expense=(filter_type == 'expense'))
-
     filter_entity = request.GET.get('filter_entity', '')
     if filter_entity:
         queryset = queryset.filter(entity_type=filter_entity)
-
     filter_scope = request.GET.get('filter_scope', '')
     if filter_scope:
         queryset = queryset.filter(transaction_scope=filter_scope)
-
     filter_status = request.GET.get('filter_status', '')
     if filter_status:
         if filter_status == 'ASSIGNED':
@@ -923,54 +799,32 @@ def all_transactions_list(request, declaration_id):
             queryset = queryset.filter(unmatched_record__status='NEW_RULE_PROPOSED')
         elif filter_status == 'UNPROCESSED':
              queryset = queryset.filter(declaration_point__isnull=True, unmatched_record__isnull=True)
-
-
-    # --- Sorting ---
     sort_by = request.GET.get('sort', '-transaction_date')
     valid_sort_fields = [
-        'transaction_date', '-transaction_date',
-        'amount', '-amount',
-        'currency', '-currency',
-        'declaration_point__name', '-declaration_point__name',
-        'sender', '-sender',
-        'is_expense', '-is_expense',           # NEW
-        'entity_type', '-entity_type',       # NEW
-        'transaction_scope', '-transaction_scope' # NEW
+        'transaction_date', '-transaction_date', 'amount', '-amount', 'currency', '-currency',
+        'declaration_point__name', '-declaration_point__name', 'sender', '-sender',
+        'is_expense', '-is_expense', 'entity_type', '-entity_type', 'transaction_scope', '-transaction_scope'
     ]
     if sort_by not in valid_sort_fields:
         sort_by = '-transaction_date'
     queryset = queryset.order_by(sort_by)
-
-    # --- Pagination ---
-    paginator = Paginator(queryset, 50) # 50 transactions per page
+    paginator = Paginator(queryset, 50)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-
-    # --- Build GET params for pagination/sorting links ---
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
-
     context = {
-        'declaration': declaration,
-        'page_obj': page_obj,
-        'search_query': search_query,
-        'current_sort': sort_by,
-        'is_admin': is_superadmin(request.user),
-        'get_params': get_params.urlencode(), # Pass GET params
-        # Pass filter values back to template
-        'filter_type': filter_type,
-        'filter_entity': filter_entity,
-        'filter_scope': filter_scope,
-        'filter_status': filter_status,
-        'entity_choices': Transaction.ENTITY_CHOICES,
+        'declaration': declaration, 'page_obj': page_obj, 'search_query': search_query, 'current_sort': sort_by,
+        'is_admin': is_superadmin(request.user), 'get_params': get_params.urlencode(),
+        'filter_type': filter_type, 'filter_entity': filter_entity, 'filter_scope': filter_scope,
+        'filter_status': filter_status, 'entity_choices': Transaction.ENTITY_CHOICES,
         'scope_choices': Transaction.SCOPE_CHOICES,
     }
     return render(request, 'tax_processor/all_transactions_list.html', context)
 
 @user_passes_test(is_permitted_user)
 def edit_transaction(request, transaction_id):
-    # ... (no changes, just add is_admin) ...
     transaction_obj = get_object_or_404(Transaction.objects.select_related(
         'statement__declaration', 'declaration_point', 'matched_rule', 'unmatched_record'
     ), pk=transaction_id)
@@ -1021,6 +875,298 @@ def edit_transaction(request, transaction_id):
         'form': form,
         'transaction': transaction_obj,
         'declaration': declaration,
-        'is_admin': is_superadmin(request.user) # Add is_admin
+        'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/edit_transaction.html', context)
+
+
+# --- NEW: EntityTypeRule Views ---
+
+@user_passes_test(is_superadmin)
+def entity_rule_list(request, declaration_id=None):
+    """Lists global or specific EntityTypeRules."""
+    is_specific = declaration_id is not None
+    declaration = None
+    if is_specific:
+        declaration = get_object_or_404(Declaration, pk=declaration_id)
+        if not (is_superadmin(request.user) or declaration.created_by == request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        queryset = EntityTypeRule.objects.filter(declaration=declaration)
+        list_title = f"Entity Rules for {declaration.name}"
+    else:
+        if not is_superadmin(request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        queryset = EntityTypeRule.objects.filter(declaration__isnull=True)
+        list_title = "Global Entity Type Rules"
+
+    queryset = queryset.select_related('declaration', 'created_by')
+
+    # --- Search, Filter, Sort, Paginate (re-using logic) ---
+    search_query = request.GET.get('q', '').strip()
+    if search_query:
+        queryset = queryset.filter(rule_name__icontains=search_query)
+    filter_active = request.GET.get('filter_active', '')
+    if filter_active:
+        queryset = queryset.filter(is_active=(filter_active == 'true'))
+    sort_by = request.GET.get('sort', 'priority')
+    valid_sort_fields = ['priority', '-priority', 'rule_name', '-rule_name', 'entity_type_result', '-entity_type_result', 'is_active', '-is_active', 'created_at', '-created_at']
+    if sort_by not in valid_sort_fields: sort_by = 'priority'
+    queryset = queryset.order_by(sort_by)
+    paginator = Paginator(queryset, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    get_params = request.GET.copy()
+    if 'page' in get_params: del get_params['page']
+
+    context = {
+        'rules': page_obj, 'page_obj': page_obj, 'declaration': declaration,
+        'is_global_list': not is_specific, 'list_title': list_title,
+        'is_admin': is_superadmin(request.user), 'search_query': search_query,
+        'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
+        'rule_type': 'entity' # For template URLs
+    }
+    # We'll create 'entity_rule_list.html' next
+    return render(request, 'tax_processor/entity_rule_list.html', context)
+
+@user_passes_test(is_superadmin)
+def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
+    """Creates or updates an EntityTypeRule (global or specific)."""
+    is_specific_rule = declaration_id is not None
+    declaration = None
+    rule = None
+    title = ""
+
+    if is_specific_rule:
+        declaration = get_object_or_404(Declaration, pk=declaration_id)
+        if not (is_superadmin(request.user) or declaration.created_by == request.user):
+             messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        if rule_id:
+             rule = get_object_or_404(EntityTypeRule, pk=rule_id, declaration=declaration)
+             title = f"Update Specific Entity Rule: {rule.rule_name}"
+        else:
+             title = f"Create New Entity Rule for {declaration.name}"
+        list_url_name = 'entity_rule_list_specific'
+        url_kwargs = {'declaration_id': declaration_id}
+    else:
+        if not is_superadmin(request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        if rule_id:
+            rule = get_object_or_404(EntityTypeRule, pk=rule_id, declaration__isnull=True)
+            title = f"Update Global Entity Rule: {rule.rule_name}"
+        else:
+            title = "Create New Global Entity Rule"
+        list_url_name = 'entity_rule_list_global'
+        url_kwargs = {}
+
+    formset_prefix = 'conditions'
+    if request.method == 'POST':
+        form = EntityTypeRuleForm(request.POST, instance=rule)
+        formset = BaseConditionFormSet(request.POST, prefix=formset_prefix)
+        if form.is_valid() and formset.is_valid():
+            new_rule = form.save(commit=False)
+            if not new_rule.pk: new_rule.created_by = request.user
+            if is_specific_rule:
+                new_rule.declaration = declaration
+            else:
+                 new_rule.declaration = None
+            checks = []
+            for check_form in formset.cleaned_data:
+                if check_form and not check_form.get('DELETE'): checks.append({'field': check_form['field'], 'type': check_form['condition_type'], 'value': check_form['value']})
+            new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+            try:
+                 new_rule.save()
+                 messages.success(request, f"Entity Rule '{new_rule.rule_name}' saved successfully.")
+                 return redirect(list_url_name, **url_kwargs)
+            except IntegrityError:
+                 messages.error(request, f"An entity rule named '{new_rule.rule_name}' already exists for this scope.")
+                 # Re-render context
+        # else:
+             # Fall through to re-render context on invalid form
+
+    else: # GET request
+        initial_form_data = {}; initial_formset_data = []
+        if rule:
+            if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
+                logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
+                for check in logic_block.get('checks', []): initial_formset_data.append({'field': check.get('field'), 'condition_type': check.get('type'), 'value': check.get('value')})
+        else: initial_form_data['logic'] = 'AND'
+        form = EntityTypeRuleForm(instance=rule, initial=initial_form_data)
+        formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
+
+    context = {
+        'form': form, 'formset': formset, 'title': title, 'rule': rule,
+        'declaration': declaration, 'is_specific_rule': is_specific_rule,
+        'list_url_name': list_url_name, 'url_kwargs': url_kwargs,
+        'bank_names': BANK_NAMES_LIST, 'is_admin': is_superadmin(request.user),
+        'rule_type': 'entity' # For template URLs
+    }
+    # Re-use the main rule_form.html template
+    return render(request, 'tax_processor/rule_form.html', context)
+
+@user_passes_test(is_permitted_user)
+@require_POST
+def entity_rule_delete(request, rule_id, declaration_id=None):
+    is_specific_rule = declaration_id is not None
+    rule = None
+    if is_specific_rule:
+        declaration = get_object_or_404(Declaration, pk=declaration_id)
+        if not (is_superadmin(request.user) or declaration.created_by == request.user):
+             messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        rule = get_object_or_404(EntityTypeRule, pk=rule_id, declaration=declaration)
+        list_url_name = 'entity_rule_list_specific'; url_kwargs = {'declaration_id': declaration_id}
+    else:
+        if not is_superadmin(request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        rule = get_object_or_404(EntityTypeRule, pk=rule_id, declaration__isnull=True)
+        list_url_name = 'entity_rule_list_global'; url_kwargs = {}
+
+    rule_name = rule.rule_name
+    rule.delete()
+    messages.success(request, f"Entity Rule '{rule_name}' successfully deleted.")
+    return redirect(list_url_name, **url_kwargs)
+
+
+# --- NEW: TransactionScopeRule Views ---
+
+@user_passes_test(is_superadmin)
+def scope_rule_list(request, declaration_id=None):
+    """Lists global or specific TransactionScopeRules."""
+    is_specific = declaration_id is not None
+    declaration = None
+    if is_specific:
+        declaration = get_object_or_404(Declaration, pk=declaration_id)
+        if not (is_superadmin(request.user) or declaration.created_by == request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        queryset = TransactionScopeRule.objects.filter(declaration=declaration)
+        list_title = f"Scope Rules for {declaration.name}"
+    else:
+        if not is_superadmin(request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        queryset = TransactionScopeRule.objects.filter(declaration__isnull=True)
+        list_title = "Global Transaction Scope Rules"
+
+    queryset = queryset.select_related('declaration', 'created_by')
+
+    # --- Search, Filter, Sort, Paginate (re-using logic) ---
+    search_query = request.GET.get('q', '').strip()
+    if search_query:
+        queryset = queryset.filter(rule_name__icontains=search_query)
+    filter_active = request.GET.get('filter_active', '')
+    if filter_active:
+        queryset = queryset.filter(is_active=(filter_active == 'true'))
+    sort_by = request.GET.get('sort', 'priority')
+    valid_sort_fields = ['priority', '-priority', 'rule_name', '-rule_name', 'scope_result', '-scope_result', 'is_active', '-is_active', 'created_at', '-created_at']
+    if sort_by not in valid_sort_fields: sort_by = 'priority'
+    queryset = queryset.order_by(sort_by)
+    paginator = Paginator(queryset, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    get_params = request.GET.copy()
+    if 'page' in get_params: del get_params['page']
+
+    context = {
+        'rules': page_obj, 'page_obj': page_obj, 'declaration': declaration,
+        'is_global_list': not is_specific, 'list_title': list_title,
+        'is_admin': is_superadmin(request.user), 'search_query': search_query,
+        'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
+        'rule_type': 'scope' # For template URLs
+    }
+    # We'll create 'scope_rule_list.html' next
+    return render(request, 'tax_processor/scope_rule_list.html', context)
+
+@user_passes_test(is_superadmin)
+def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
+    """Creates or updates a TransactionScopeRule (global or specific)."""
+    is_specific_rule = declaration_id is not None
+    declaration = None
+    rule = None
+    title = ""
+
+    if is_specific_rule:
+        declaration = get_object_or_404(Declaration, pk=declaration_id)
+        if not (is_superadmin(request.user) or declaration.created_by == request.user):
+             messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        if rule_id:
+             rule = get_object_or_404(TransactionScopeRule, pk=rule_id, declaration=declaration)
+             title = f"Update Specific Scope Rule: {rule.rule_name}"
+        else:
+             title = f"Create New Scope Rule for {declaration.name}"
+        list_url_name = 'scope_rule_list_specific'
+        url_kwargs = {'declaration_id': declaration_id}
+    else:
+        if not is_superadmin(request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        if rule_id:
+            rule = get_object_or_404(TransactionScopeRule, pk=rule_id, declaration__isnull=True)
+            title = f"Update Global Scope Rule: {rule.rule_name}"
+        else:
+            title = "Create New Global Scope Rule"
+        list_url_name = 'scope_rule_list_global'
+        url_kwargs = {}
+
+    formset_prefix = 'conditions'
+    if request.method == 'POST':
+        form = TransactionScopeRuleForm(request.POST, instance=rule)
+        formset = BaseConditionFormSet(request.POST, prefix=formset_prefix)
+        if form.is_valid() and formset.is_valid():
+            new_rule = form.save(commit=False)
+            if not new_rule.pk: new_rule.created_by = request.user
+            if is_specific_rule:
+                new_rule.declaration = declaration
+            else:
+                 new_rule.declaration = None
+            checks = []
+            for check_form in formset.cleaned_data:
+                if check_form and not check_form.get('DELETE'): checks.append({'field': check_form['field'], 'type': check_form['condition_type'], 'value': check_form['value']})
+            new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+            try:
+                 new_rule.save()
+                 messages.success(request, f"Scope Rule '{new_rule.rule_name}' saved successfully.")
+                 return redirect(list_url_name, **url_kwargs)
+            except IntegrityError:
+                 messages.error(request, f"A scope rule named '{new_rule.rule_name}' already exists for this scope.")
+                 # Re-render context
+        # else:
+             # Fall through to re-render context on invalid form
+
+    else: # GET request
+        initial_form_data = {}; initial_formset_data = []
+        if rule:
+            if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
+                logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
+                for check in logic_block.get('checks', []): initial_formset_data.append({'field': check.get('field'), 'condition_type': check.get('type'), 'value': check.get('value')})
+        else: initial_form_data['logic'] = 'AND'
+        form = TransactionScopeRuleForm(instance=rule, initial=initial_form_data)
+        formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
+
+    context = {
+        'form': form, 'formset': formset, 'title': title, 'rule': rule,
+        'declaration': declaration, 'is_specific_rule': is_specific_rule,
+        'list_url_name': list_url_name, 'url_kwargs': url_kwargs,
+        'bank_names': BANK_NAMES_LIST, 'is_admin': is_superadmin(request.user),
+        'rule_type': 'scope' # For template URLs
+    }
+    # Re-use the main rule_form.html template
+    return render(request, 'tax_processor/rule_form.html', context)
+
+@user_passes_test(is_permitted_user)
+@require_POST
+def scope_rule_delete(request, rule_id, declaration_id=None):
+    is_specific_rule = declaration_id is not None
+    rule = None
+    if is_specific_rule:
+        declaration = get_object_or_404(Declaration, pk=declaration_id)
+        if not (is_superadmin(request.user) or declaration.created_by == request.user):
+             messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        rule = get_object_or_404(TransactionScopeRule, pk=rule_id, declaration=declaration)
+        list_url_name = 'scope_rule_list_specific'; url_kwargs = {'declaration_id': declaration_id}
+    else:
+        if not is_superadmin(request.user):
+            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        rule = get_object_or_404(TransactionScopeRule, pk=rule_id, declaration__isnull=True)
+        list_url_name = 'scope_rule_list_global'; url_kwargs = {}
+
+    rule_name = rule.rule_name
+    rule.delete()
+    messages.success(request, f"Scope Rule '{rule_name}' successfully deleted.")
+    return redirect(list_url_name, **url_kwargs)
