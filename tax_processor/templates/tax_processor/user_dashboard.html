@@ -8,27 +8,40 @@
     <style>
         /* (Keep existing styles) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
-        .header-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #007bff; padding-bottom: 15px; margin-bottom: 30px; }
-        h1 { color: #007bff; font-size: 2em; margin: 0; }
-        .user-status { font-size: 0.9em; color: #555; }
-        .user-status strong { font-weight: 600; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+
+        /* Remove header-bar, it is replaced by navbar */
+        .header-bar { display: none; }
+        h1 { color: #007bff; font-size: 2em; margin: 0; margin-bottom: 25px; border-bottom: 2px solid #ccc; padding-bottom: 10px;}
+
         .messages { list-style: none; padding: 0; margin-bottom: 20px; }
         .messages li { padding: 10px 15px; border-radius: 4px; margin-bottom: 10px; font-weight: 500; }
         .messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6fb; }
         .messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-        .action-area { margin-bottom: 30px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;}
-        .action-area a, .action-area button { display: inline-block; padding: 10px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; transition: background-color 0.2s; border: none; cursor: pointer; }
-        .upload-btn { background-color: #28a745; color: white; }
-        .review-btn { background-color: #ffc107; color: #343a40; }
-        .rule-btn { background-color: #6c757d; color: white; }
-        .proposal-link { font-weight: bold; color: #dc3545; text-decoration: none; margin-left: 15px;}
-        .proposal-link:hover { text-decoration: underline; }
+
+        /* Hide action-area, it is replaced by navbar */
+        .action-area { display: none; }
+
+        /* Search & Filter Form */
+        .filter-form { margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; display: grid; grid-template-columns: 2fr 1fr auto; gap: 10px; align-items: flex-end; }
+        .filter-form .form-group { display: flex; flex-direction: column; }
+        .filter-form label { font-weight: 600; font-size: 0.85em; margin-bottom: 5px; color: #495057; }
+        .filter-form input[type="text"], .filter-form select {
+            padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
+        }
+        .filter-form .btn-group { display: flex; gap: 5px; }
+        .filter-form button { padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .filter-form a { padding: 8px 15px; background-color: #6c757d; color: white; border-radius: 4px; text-decoration: none; font-size: 0.9em; text-align: center; box-sizing: border-box; }
+
         h2 { font-size: 1.5em; color: #007bff; margin-top: 30px; margin-bottom: 15px; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
         th { background-color: #e9ecef; color: #495057; font-weight: 600; }
+        th a { color: inherit; text-decoration: none; } /* Sort links */
+        th a:hover { text-decoration: underline; }
+        .sort-asc::after { content: " ▲"; font-size: 0.8em; }
+        .sort-desc::after { content: " ▼"; font-size: 0.8em; }
         tr:hover { background-color: #f8f9fa; }
         .alert-unmatched { background-color: #fff3cd; color: #856404; font-weight: bold; }
         .action-cell { white-space: nowrap; }
@@ -37,25 +50,20 @@
         .btn-analyze:hover { background-color: #0056b3; }
         .btn-review { background-color: #dc3545; color: white; }
         .btn-review:hover { background-color: #c82333; }
+
+        /* Pagination */
+        .pagination { margin-top: 25px; text-align: center; }
+        .pagination a, .pagination .current { display: inline-block; padding: 6px 12px; margin: 0 2px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #007bff; }
+        .pagination .current { background-color: #007bff; color: white; border-color: #007bff; }
+        .pagination a:hover { background-color: #f0f0f0; }
     </style>
 </head>
 <body>
 <div class="container">
 
-    <div class="header-bar">
-        <h1>Հարկային Համապատասխանության Համակարգ</h1> {# Tax Compliance System #}
-        <div class="user-status">
-            {% if user.is_authenticated %}
-            <span>Մուտք գործված է որպես։ <strong>{{ user.username }}</strong> {% if is_admin %}(SUPERADMIN){% endif %}</span> {# Logged in as: #}
-            <form method="post" action="{% url 'logout' %}" style="display: inline; margin-left: 15px;">
-                {% csrf_token %}
-                <button type="submit" style="color: #a00; border: none; background: none; cursor: pointer; padding: 0; font-size: 1em; text-decoration: underline;">
-                    Ելք {# Logout #}
-                </button>
-            </form>
-            {% endif %}
-        </div>
-    </div>
+    {% include "tax_processor/base_navigation.html" %}
+
+    <h1>Հարկային Համապատասխանության Համակարգ</h1> {# Tax Compliance System #}
 
     {% if messages %}
     <ul class="messages">
@@ -66,59 +74,76 @@
     {% endif %}
 
     {% if is_admin %}
-    <p style="background-color: #f0f8ff; padding: 10px; border-left: 4px solid #007bff;">
-        Դուք մուտք եք գործել որպես <strong>SUPERADMIN</strong>։ Դուք տեսնում եք բոլոր Հայտարարագրերը և ունեք կառավարման գործիքներ։ {# You are logged in as SUPERADMIN... #}
+    <p style="background-color: #f0f8ff; padding: 10px; border-left: 4px solid #007bff; margin-bottom: 25px;">
+        Դուք մուտք եք գործել որպես <strong>SUPERADMIN</strong>։ Դուք տեսնում եք բոլոր Հայտարարագրերը և ունեք կառավարման գործիքներ։
     </p>
     {% endif %}
 
-    <div class="action-area">
-        <a href="{% url 'upload_statement' %}" class="upload-btn">
-            + Նոր Հայտարարագիր
-        </a>
-
-        <a href="{% url 'review_queue' %}" class="review-btn">
-            Վերանայել Սպասվող Գործարքները {# Review Pending Transactions #}
-        </a>
-
-        {% if is_admin %}
-        <a href="{% url 'rule_list_global' %}" class="rule-btn">
-            Կառավարել Գլոբալ Կանոնները {# Manage Global Rules #}
-        </a>
-
-        <!-- Link for Manual Proposals -->
-        {% if pending_proposals_count > 0 %}
-        <a href="{% url 'review_proposals' %}" class="proposal-link">
-            🔔 Վերանայել Ձեռքով Առաջարկները ({{ pending_proposals_count }}) {# Review Manual Proposals #}
-        </a>
-        {% endif %}
-
-        <!-- UPDATED: Link for Global Rule Proposals -->
-        {% if pending_global_rules_count > 0 %}
-        <a href="{% url 'review_global_proposals' %}" class="proposal-link">
-            🔔 Վերանայել Գլոբալ Կանոնների Առաջարկները ({{ pending_global_rules_count }}) {# Review Global Rule Proposals #}
-        </a>
-        {% endif %}
-        <!-- END UPDATED -->
-
-        {% endif %}
-    </div>
-
     <h2>Ձեր Հայտարարագրերը</h2> {# Your Declarations #}
+
+    <form method="get" action="" class="filter-form">
+        <div class="form-group">
+            <label for="q">Որոնել</label>
+            <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Որոնել անունով, հաճախորդով...">
+        </div>
+        <div class="form-group">
+            <label for="filter_status">Կարգավիճակ</label>
+            <select name="filter_status" id="filter_status">
+                <option value="">Բոլորը</option>
+                <option value="DRAFT" {% if filter_status == 'DRAFT' %}selected{% endif %}>Սևագիր</option>
+                <option value="ANALYSIS_COMPLETE" {% if filter_status == 'ANALYSIS_COMPLETE' %}selected{% endif %}>Վերլուծված</option>
+                <option value="FILED" {% if filter_status == 'FILED' %}selected{% endif %}>Հանձնված</option>
+            </select>
+        </div>
+        <div class="btn-group">
+            <button type="submit">Որոնել</button>
+            <a href="{% url 'user_dashboard' %}">Մաքրել</a>
+        </div>
+    </form>
+
+
     <table>
         <thead>
         <tr>
-            <th>Անվանում</th> {# Name #}
-            <th>Տարեթիվ</th> {# Period Start #}
-            <th>Քաղվածքներ</th> {# Statements #}
-            <th>Գործարքներ</th> {# Transactions #}
-            <th>Սպասում է Վերանայման</th> {# Pending Review #}
+            <th>
+                <a href="?sort={% if current_sort == 'name' %}-{% endif %}name&{{ get_params }}"
+                   class="{% if 'name' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Անվանում
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'tax_period_start' %}-{% endif %}tax_period_start&{{ get_params }}"
+                   class="{% if 'tax_period_start' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Տարեթիվ
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'statement_count' %}-{% endif %}statement_count&{{ get_params }}"
+                   class="{% if 'statement_count' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Քաղվածքներ
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'total_transactions' %}-{% endif %}total_transactions&{{ get_params }}"
+                   class="{% if 'total_transactions' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Գործարքներ
+                </a>
+            </th>
+            <th>
+                <a href="?sort={% if current_sort == 'unmatched_count' %}-{% endif %}unmatched_count&{{ get_params }}"
+                   class="{% if 'unmatched_count' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Սպասում է Վերանայման
+                </a>
+            </th>
             <th>Գործողություններ</th> {# Actions #}
         </tr>
         </thead>
         <tbody>
-        {% for declaration in declarations %}
+        {% for declaration in declarations %} {# declarations is page_obj #}
         <tr>
-            <td><strong>{{ declaration.name }}</strong></td>
+            <td><strong>{{ declaration.name }}</strong><br>
+                <small>{{ declaration.first_name }} {{ declaration.last_name }}</small>
+            </td>
             <td>{{ declaration.tax_period_start|date:"Y-m-d" }}</td>
             <td>{{ declaration.statement_count }}</td>
             <td>{{ declaration.total_transactions }}</td>
@@ -134,11 +159,34 @@
         </tr>
         {% empty %}
         <tr>
-            <td colspan="6">Հայտարարագրեր դեռևս չեն ստեղծվել։</td> {# No declarations created yet. #}
+            <td colspan="6" style="text-align: center; color: #6c757d;">
+                {% if search_query or filter_status %}
+                Որոնմանը/ֆիլտրին համապատասխանող հայտարարագրեր չեն գտնվել։
+                {% else %}
+                Հայտարարագրեր դեռևս չեն ստեղծվել։
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
         </tbody>
     </table>
+
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page=1&{{ get_params }}">&laquo; Առաջին</a>
+        <a href="?page={{ page_obj.previous_page_number }}&{{ get_params }}">Նախորդ</a>
+        {% endif %}
+
+        <span class="current">
+            Էջ {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}.
+        </span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&{{ get_params }}">Հաջորդ</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}&{{ get_params }}">Վերջին &raquo;</a>
+        {% endif %}
+    </div>
+
 </div>
 </body>
 </html>

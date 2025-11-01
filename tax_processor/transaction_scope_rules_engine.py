@@ -118,13 +118,11 @@ class TransactionScopeRulesEngine:
         print(f"--- Running TxScope Analysis for Declaration ID: {self.declaration_id} ---")
 
         if run_all:
-            # Re-evaluate ALL transactions for this declaration
             transactions_qs = Transaction.objects.filter(
                 statement__declaration_id=self.declaration_id
             ).select_related('statement')
             print("   -> Mode: Re-evaluating ALL transactions.")
         else:
-            # Only evaluate new/undetermined transactions
             transactions_qs = Transaction.objects.filter(
                 statement__declaration_id=self.declaration_id,
                 transaction_scope='UNDETERMINED'
@@ -138,22 +136,26 @@ class TransactionScopeRulesEngine:
         matched_count = 0
 
         for tx in transactions_for_analysis:
+            # --- THIS IS THE FIX ---
+            match_found = False
+            # --- END FIX ---
+
             for rule in self.rules:
                 if self._check_rule(tx, rule):
-                    # Check if the rule's result is different from the current value
+                    # A rule matched, apply its result
                     if tx.transaction_scope != rule.scope_result:
                         tx.transaction_scope = rule.scope_result
-                        transactions_to_update.append(tx)
+                        if tx not in transactions_to_update:
+                            transactions_to_update.append(tx)
                     matched_count += 1
+                    match_found = True
                     break # First Match Wins
 
-            # --- THIS IS THE NEW LOGIC ---
-            # If no rule matched and the tx is still undetermined, set default to LOCAL - just remove this part if we don't need default to local
+            # This logic is now safe to run
             if not match_found and tx.transaction_scope == 'UNDETERMINED':
                 tx.transaction_scope = 'LOCAL'
                 if tx not in transactions_to_update:
                     transactions_to_update.append(tx)
-            # --- END NEW LOGIC ---
 
         if transactions_to_update:
             updated_count = Transaction.objects.bulk_update(transactions_to_update, ['transaction_scope'])

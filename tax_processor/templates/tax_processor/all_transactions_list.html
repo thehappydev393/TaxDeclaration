@@ -6,15 +6,20 @@
     <title>Բոլոր Գործարքները - {{ declaration.name }}</title> {# All Transactions #}
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; font-size: 14px;}
-        .container { max-width: 1400px; /* Wider container */ margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        .container { max-width: 1600px; /* Wider container */ margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
         h1 { color: #007bff; font-size: 1.8em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 15px; }
         h2 { font-size: 1.1em; color: #555; margin-top: 0; margin-bottom: 20px; font-weight: normal;}
 
-        /* Search Form */
-        .search-form { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
-        .search-form input[type="text"] { padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; }
-        .search-form button { padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .search-form a { font-size: 0.9em; color: #6c757d; margin-left: 10px; }
+        /* Search & Filter Form */
+        .filter-form { margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: flex-end; }
+        .filter-form .form-group { display: flex; flex-direction: column; }
+        .filter-form label { font-weight: 600; font-size: 0.85em; margin-bottom: 5px; color: #495057; }
+        .filter-form input[type="text"], .filter-form select {
+            padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
+        }
+        .filter-form .btn-group { display: flex; gap: 5px; }
+        .filter-form button { padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .filter-form a { padding: 8px 15px; background-color: #6c757d; color: white; border-radius: 4px; text-decoration: none; font-size: 0.9em; text-align: center; box-sizing: border-box; }
 
         /* Table Styling */
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em; }
@@ -25,9 +30,13 @@
         .sort-asc::after { content: " ▲"; font-size: 0.8em; }
         .sort-desc::after { content: " ▼"; font-size: 0.8em; }
         tr:hover { background-color: #f8f9fa; }
-        td.description-cell { max-width: 300px; word-wrap: break-word; } /* Limit description width */
+        td.description-cell { max-width: 300px; word-wrap: break-word; }
         td.status-cell { font-style: italic; color: #555; font-size: 0.9em; }
         .status-pending { color: #ff8c00; font-weight: bold; }
+        .status-proposed { color: #17a2b8; font-weight: bold; }
+        .status-unprocessed { color: #dc3545; font-weight: bold; }
+        .type-income { color: #28a745; font-weight: 600; }
+        .type-expense { color: #dc3545; font-weight: 600; }
 
         /* Pagination */
         .pagination { margin-top: 25px; text-align: center; }
@@ -39,12 +48,14 @@
         .action-links a { color: #007bff; text-decoration: none; margin-right: 8px; font-size: 0.9em; }
         .action-links a:hover { text-decoration: underline; }
 
-        .nav-links { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
-        .nav-links a { color: #007bff; text-decoration: none; margin-right: 15px; }
+        .footer-nav { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
+        .footer-nav a { color: #007bff; text-decoration: none; margin-right: 15px; }
     </style>
 </head>
 <body>
 <div class="container">
+    {% include "tax_processor/base_navigation.html" %}
+
     <h1>Բոլոր Գործարքները</h1> {# All Transactions #}
     <h2>Հայտարարագիր։ {{ declaration.name }}</h2> {# Declaration #}
 
@@ -52,64 +63,104 @@
     <ul class="messages"> {% for message in messages %} <li class="{{ message.tags }}">{{ message|safe }}</li> {% endfor %} </ul>
     {% endif %}
 
-    <form method="get" action="" class="search-form">
-        <input type="text" name="q" value="{{ search_query }}" placeholder="Որոնել նկարագրությամբ կամ ուղարկողով..."> {# Search by description or sender... #}
-        {# Add hidden fields to preserve sorting when searching #}
-        {% if current_sort != '-transaction_date' %}
-        <input type="hidden" name="sort" value="{{ current_sort }}">
-        {% endif %}
-        <button type="submit">Որոնել</button> {# Search #}
-        {% if search_query %}
-        <a href="{% url 'all_transactions_list' declaration_id=declaration.id %}?sort={{ current_sort }}">Մաքրել</a> {# Clear #}
-        {% endif %}
+    <form method="get" action="" class="filter-form">
+        <div class="form-group">
+            <label for="q">Որոնել</label>
+            <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Որոնել նկարագրությամբ կամ ուղարկողով...">
+        </div>
+        <div class="form-group">
+            <label for="filter_type">Տեսակ</label>
+            <select name="filter_type" id="filter_type">
+                <option value="">Բոլորը</option>
+                <option value="income" {% if filter_type == 'income' %}selected{% endif %}>Մուտք</option>
+                <option value="expense" {% if filter_type == 'expense' %}selected{% endif %}>Ելք</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="filter_entity">Իրավական</label>
+            <select name="filter_entity" id="filter_entity">
+                <option value="">Բոլորը</option>
+                {% for val, name in entity_choices %}
+                <option value="{{ val }}" {% if filter_entity == val %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="filter_scope">Տարածք</label>
+            <select name="filter_scope" id="filter_scope">
+                <option value="">Բոլորը</option>
+                {% for val, name in scope_choices %}
+                <option value="{{ val }}" {% if filter_scope == val %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="filter_status">Կարգավիճակ</label>
+            <select name="filter_status" id="filter_status">
+                <option value="">Բոլորը</option>
+                <option value="ASSIGNED" {% if filter_status == 'ASSIGNED' %}selected{% endif %}>Նշանակված</option>
+                <option value="PENDING" {% if filter_status == 'PENDING' %}selected{% endif %}>Սպասում է Վերանայման</option>
+                <option value="PROPOSED" {% if filter_status == 'PROPOSED' %}selected{% endif %}>Առաջարկված</option>
+                <option value="UNPROCESSED" {% if filter_status == 'UNPROCESSED' %}selected{% endif %}>Չմշակված</option>
+            </select>
+        </div>
+        <div class="btn-group">
+            <button type="submit">Որոնել</button>
+            <a href="{% url 'all_transactions_list' declaration_id=declaration.id %}">Մաքրել</a>
+        </div>
     </form>
 
     <table>
         <thead>
         <tr>
             <th> {# Date #}
-                {% with sort_field='transaction_date' current_sort=current_sort %}
-                {% if current_sort == sort_field %} {# Currently sorted ASC #}
-                <a href="?sort=-{{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-asc">Ամսաթիվ</a>
-                {% elif current_sort == '-'|add:sort_field %} {# Currently sorted DESC #}
-                <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-desc">Ամսաթիվ</a>
-                {% else %} {# Not sorted by this field #}
-                <a href="?sort=-{{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}">Ամսաթիվ</a>
-                {% endif %}
-                {% endwith %}
+                <a href="?sort={% if current_sort == 'transaction_date' %}-{% endif %}transaction_date&{{ get_params }}"
+                   class="{% if 'transaction_date' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Ամսաթիվ
+                </a>
+            </th>
+            <th> {# Type #}
+                <a href="?sort={% if current_sort == 'is_expense' %}-{% endif %}is_expense&{{ get_params }}"
+                   class="{% if 'is_expense' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Տեսակ
+                </a>
             </th>
             <th> {# Amount #}
-                {% with sort_field='amount' current_sort=current_sort %}
-                {% if current_sort == sort_field %} <a href="?sort=-{{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-asc">Գումար</a>
-                {% elif current_sort == '-'|add:sort_field %} <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-desc">Գումար</a>
-                {% else %} <a href="?sort=-{{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}">Գումար</a>
-                {% endif %}
-                {% endwith %}
+                <a href="?sort={% if current_sort == 'amount' %}-{% endif %}amount&{{ get_params }}"
+                   class="{% if 'amount' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Գումար
+                </a>
             </th>
             <th> {# Currency #}
-                {% with sort_field='currency' current_sort=current_sort %}
-                {% if current_sort == sort_field %} <a href="?sort=-{{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-asc">Արժույթ</a>
-                {% elif current_sort == '-'|add:sort_field %} <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-desc">Արժույթ</a>
-                {% else %} <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}">Արժույթ</a>
-                {% endif %}
-                {% endwith %}
+                <a href="?sort={% if current_sort == 'currency' %}-{% endif %}currency&{{ get_params }}"
+                   class="{% if 'currency' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Արժույթ
+                </a>
             </th>
-            <th>Նկարագրություն</th> {# Description #}
+            <th>Նկարագրություն</th> {# Description (not sortable) #}
             <th> {# Sender #}
-                {% with sort_field='sender' current_sort=current_sort %}
-                {% if current_sort == sort_field %} <a href="?sort=-{{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-asc">Ուղարկող</a>
-                {% elif current_sort == '-'|add:sort_field %} <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-desc">Ուղարկող</a>
-                {% else %} <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}">Ուղարկող</a>
-                {% endif %}
-                {% endwith %}
+                <a href="?sort={% if current_sort == 'sender' %}-{% endif %}sender&{{ get_params }}"
+                   class="{% if 'sender' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Ուղարկող
+                </a>
             </th>
             <th> {# Assigned Point #}
-                {% with sort_field='declaration_point__name' current_sort=current_sort %}
-                {% if current_sort == sort_field %} <a href="?sort=-{{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-asc">Հայտարարագրման Կետ</a>
-                {% elif current_sort == '-'|add:sort_field %} <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}" class="sort-desc">Հայտարարագրման Կետ</a>
-                {% else %} <a href="?sort={{ sort_field }}{% if search_query %}&q={{ search_query }}{% endif %}">Հայտարարագրման Կետ</a>
-                {% endif %}
-                {% endwith %}
+                <a href="?sort={% if current_sort == 'declaration_point__name' %}-{% endif %}declaration_point__name&{{ get_params }}"
+                   class="{% if 'declaration_point__name' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Հայտարարագրման Կետ
+                </a>
+            </th>
+            <th> {# Entity Type #}
+                <a href="?sort={% if current_sort == 'entity_type' %}-{% endif %}entity_type&{{ get_params }}"
+                   class="{% if 'entity_type' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Իրավական
+                </a>
+            </th>
+            <th> {# Scope #}
+                <a href="?sort={% if current_sort == 'transaction_scope' %}-{% endif %}transaction_scope&{{ get_params }}"
+                   class="{% if 'transaction_scope' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
+                    Տարածք
+                </a>
             </th>
             <th>Կարգավիճակ</th> {# Status #}
             <th>Գործող.</th> {# Actions #}
@@ -119,11 +170,16 @@
         {% for tx in page_obj %}
         <tr>
             <td nowrap>{{ tx.transaction_date|date:"Y-m-d H:i" }}</td>
+            <td class="{% if tx.is_expense %}type-expense{% else %}type-income{% endif %}">
+                {% if tx.is_expense %}Ելք{% else %}Մուտք{% endif %}
+            </td>
             <td nowrap>{{ tx.amount|floatformat:2 }}</td>
             <td>{{ tx.currency }}</td>
             <td class="description-cell">{{ tx.description|truncatechars:100 }}</td>
             <td>{{ tx.sender|truncatechars:50 }}</td>
             <td>{{ tx.declaration_point.name|default:"--" }}</td>
+            <td>{{ tx.get_entity_type_display }}</td>
+            <td>{{ tx.get_transaction_scope_display }}</td>
             <td class="status-cell">
                 {% if tx.declaration_point %}
                 {% if tx.matched_rule %}
@@ -131,28 +187,31 @@
                 {% else %}
                 (Ձեռքով) {# Manual #}
                 {% endif %}
-                {% elif tx.unmatched_record %} {# Check if unmatched record exists #}
-                <span class="status-pending">{{ tx.unmatched_record.get_status_display }}</span> {# Show status like Pending/Proposed #}
+                {% elif tx.unmatched_record %}
+                {% if tx.unmatched_record.status == 'NEW_RULE_PROPOSED' %}
+                <span class="status-proposed">{{ tx.unmatched_record.get_status_display }}</span>
                 {% else %}
-                <span class="status-pending">Սպասում է Վերլուծության</span> {# Pending Analysis (No unmatched record yet) #}
+                <span class="status-pending">{{ tx.unmatched_record.get_status_display }}</span>
+                {% endif %}
+                {% else %}
+                <span class="status-unprocessed">Սպասում է Վերլուծության</span> {# Pending Analysis (No unmatched record yet) #}
                 {% endif %}
             </td>
             <td class="action-links" nowrap>
-                {# --- ADD EDIT LINK --- #}
-                <a href="{% url 'edit_transaction' tx.id %}">Խմբագրել</a> {# Edit #}
+                {# --- UPDATED EDIT LINK --- #}
+                <a href="{% url 'edit_transaction' tx.id %}" target="_blank">Խմբագրել</a> {# Edit #}
                 {# --- END EDIT LINK --- #}
 
                 {% if not tx.declaration_point and tx.unmatched_record %}
-                {# Link to resolve page if pending #}
-                | <a href="{% url 'resolve_transaction' tx.unmatched_record.pk %}" style="color: #ff8c00;">Լուծել</a> {# Resolve #}
+                | <a href="{% url 'resolve_transaction' tx.unmatched_record.pk %}" target="_blank" style="color: #ff8c00;">Լուծել</a> {# Resolve #}
                 {% endif %}
             </td>
         </tr>
         {% empty %}
         <tr>
-            <td colspan="8" style="text-align: center; color: #6c757d;">
-                {% if search_query %}
-                Որոնմանը համապատասխանող գործարքներ չեն գտնվել։ {# No transactions found matching search. #}
+            <td colspan="11" style="text-align: center; color: #6c757d;">
+                {% if search_query or filter_type or filter_entity or filter_scope or filter_status %}
+                Որոնմանը/ֆիլտրին համապատասխանող գործարքներ չեն գտնվել։ {# No transactions found matching search/filter. #}
                 {% else %}
                 Այս հայտարարագրի համար գործարքներ չկան։ {# No transactions for this declaration. #}
                 {% endif %}
@@ -164,8 +223,8 @@
 
     <div class="pagination">
         {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort != '-transaction_date' %}&sort={{ current_sort }}{% endif %}">&laquo; Առաջին</a> {# First #}
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort != '-transaction_date' %}&sort={{ current_sort }}{% endif %}">Նախորդ</a> {# Previous #}
+        <a href="?page=1&{{ get_params }}">&laquo; Առաջին</a> {# First #}
+        <a href="?page={{ page_obj.previous_page_number }}&{{ get_params }}">Նախորդ</a> {# Previous #}
         {% endif %}
 
         <span class="current">
@@ -173,12 +232,12 @@
         </span>
 
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort != '-transaction_date' %}&sort={{ current_sort }}{% endif %}">Հաջորդ</a> {# Next #}
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort != '-transaction_date' %}&sort={{ current_sort }}{% endif %}">Վերջին &raquo;</a> {# Last #}
+        <a href="?page={{ page_obj.next_page_number }}&{{ get_params }}">Հաջորդ</a> {# Next #}
+        <a href="?page={{ page_obj.paginator.num_pages }}&{{ get_params }}">Վերջին &raquo;</a> {# Last #}
         {% endif %}
     </div>
 
-    <div class="nav-links">
+    <div class="footer-nav">
         <a href="{% url 'declaration_detail' declaration.id %}">← Վերադառնալ Հայտարարագրի Մանրամասներ</a> {# Back to Declaration Details #}
     </div>
 </div>

@@ -34,6 +34,7 @@
 </head>
 <body>
 <div class="container">
+    {% include "tax_processor/base_navigation.html" %}
     <h1>Վերջնական Հարկային Հայտարարգիր</h1>
 
     <div class="summary-header">
@@ -100,7 +101,7 @@
     </p>
     {% endif %}
 
-    <div class="nav-links">
+    <div class="footer-nav">
         <a href="{% url 'declaration_detail' declaration.pk %}">← Վերադառնալ Մանրամասներ</a>
         <a href="{% url 'user_dashboard' %}">Գնալ Գլխավոր Էջ</a>
     </div>

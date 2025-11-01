@@ -9,7 +9,7 @@
 
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
-        .container { max-width: 900px; /* Increased width */ margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        .container { max-width: 1400px; /* Increased width */ margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         h1, h2, h3 { color: #007bff; margin-top: 0; }
         h1 { font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-bottom: 25px; }
         h2 { font-size: 1.4em; color: #495057; margin-top: 25px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
@@ -74,6 +74,7 @@
 </head>
 <body>
 <div class="container">
+    {% include "tax_processor/base_navigation.html" %}
     <h1>Լուծել Գործարքը (#{{ unmatched_item.pk }})</h1>
 
     {% if resolution_form.non_field_errors or rule_form.non_field_errors or condition_formset.non_field_errors %}

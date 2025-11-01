@@ -7,7 +7,7 @@
     <style>
         /* (Keep existing styles) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
         h1 { color: #28a745; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; }
         h2 { font-size: 1.2em; color: #555; margin-top: 5px; margin-bottom: 25px; font-weight: normal;}
         .messages { list-style: none; padding: 0; margin-bottom: 20px; } /* ... (message styles) */
@@ -17,14 +17,15 @@
         input[type="file"] { padding: 10px 0; width: 100%; /* Make input take full width */ border: 1px solid #ced4da; border-radius: 4px; padding: 10px; box-sizing: border-box;}
         .helptext { font-size: 0.9em; color: #6c757d; margin-top: 5px; } /* Style for help text */
         .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
-        button[type="submit"] { padding: 12px 25px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
-        button[type="submit"]:hover { background-color: #1e7e34; }
-        .nav-links { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
-        .nav-links a { color: #007bff; text-decoration: none; }
+        *:not(.nav-user > form) > button[type="submit"] { padding: 12px 25px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
+        *:not(.nav-user > form) > button[type="submit"]:hover { background-color: #1e7e34; }
+        .footer-nav { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
+        .footer-nav a { color: #007bff; text-decoration: none; }
     </style>
 </head>
 <body>
 <div class="container">
+    {% include "tax_processor/base_navigation.html" %}
     <h1>Ավելացնել Քաղվածքներ</h1> {# Add Statements #}
     <h2>Հայտարարագիր։ {{ declaration.name }}</h2> {# Declaration #}
 
@@ -55,7 +56,7 @@
         <button type="submit">Ավելացնել և Մշակել Քաղվածքները</button> {# Add and Process Statements #}
     </form>
 
-    <div class="nav-links">
+    <div class="footer-nav">
         <a href="{% url 'declaration_detail' declaration.id %}">← Վերադառնալ Հայտարարագրի Մանրամասներ</a> {# Back to Declaration Details #}
     </div>
 </div>

@@ -6,7 +6,7 @@
     <title>{{ title }}</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
 
         /* Table Styling */
@@ -19,12 +19,13 @@
         .proposal-row { background-color: #fff8e1; border-left: 5px solid #ffc107; }
         .action-link-finalize { background-color: #ffc107; color: #343a40; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-weight: bold; }
         .action-link-finalize:hover { background-color: #e0a800; }
-        .nav-links { margin-top: 20px; }
+        .footer-nav { margin-top: 20px; }
         .details-small { font-size: 0.85em; color: #6c757d; }
     </style>
 </head>
 <body>
 <div class="container">
+    {% include "tax_processor/base_navigation.html" %}
     <h1>{{ title }}</h1>
 
     {% if messages %}
@@ -35,7 +36,7 @@
     </ul>
     {% endif %}
 
-    <div class="nav-links">
+    <div class="footer-nav">
         <a href="{% url 'user_dashboard' %}" style="color: #007bff;">← Վերադառնալ Գլխավոր Էջ</a> |
         <a href="{% url 'rule_list_global' %}" style="color: #007bff;">Կառավարել Գլոբալ Կանոնները</a>
     </div>

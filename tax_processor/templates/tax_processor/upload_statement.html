@@ -14,7 +14,7 @@
             padding: 20px;
         }
         .container {
-            max-width: 800px;
+            max-width: 1400px;
             margin: 0 auto;
             background: white;
             padding: 30px;
@@ -74,7 +74,7 @@
         }
 
         /* Button Styling */
-        button[type="submit"] {
+        *:not(.nav-user > form) > button[type="submit"] {
             padding: 12px 25px;
             background-color: #28a745; /* Success Green */
             color: white;
@@ -85,28 +85,29 @@
             font-weight: bold;
             transition: background-color 0.2s;
         }
-        button[type="submit"]:hover {
+        *:not(.nav-user > form) > button[type="submit"]:hover {
             background-color: #1e7e34;
         }
 
         /* Navigation Links */
-        .nav-links {
+        .footer-nav {
             margin-top: 30px;
             padding-top: 15px;
             border-top: 1px solid #eee;
             font-size: 0.9em;
         }
-        .nav-links a {
+        .footer-nav a {
             color: #007bff;
             text-decoration: none;
         }
-        .nav-links a:hover {
+        .footer-nav a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
 <body>
 <div class="container">
+    {% include "tax_processor/base_navigation.html" %}
     <h1>Քաղվածքների վերբեռնում</h1>
 
     {% if messages %}
@@ -125,7 +126,7 @@
         <button type="submit">Վերբեռնել և մշակել քաղվածքները</button>
     </form>
 
-    <div class="nav-links">
+    <div class="footer-nav">
         <a href="{% url 'user_dashboard' %}">← Վերադառնալ Գլխավոր Էջ</a>
     </div>
 </div>
