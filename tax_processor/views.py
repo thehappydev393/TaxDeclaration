@@ -492,14 +492,8 @@ def user_dashboard(request):
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
-    pending_proposals_count = 0
-    pending_global_rules_count = 0
-    if is_superadmin(user):
-        pending_proposals_count = UnmatchedTransaction.objects.filter(status='NEW_RULE_PROPOSED').count()
-        pending_global_rules_count = TaxRule.objects.filter(proposal_status='PENDING_GLOBAL').count()
     context = {
         'declarations': page_obj, 'page_obj': page_obj, 'is_admin': is_superadmin(user),
-        'pending_proposals_count': pending_proposals_count, 'pending_global_rules_count': pending_global_rules_count,
         'search_query': search_query, 'filter_status': filter_status,
         'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
