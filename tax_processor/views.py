@@ -149,19 +149,17 @@ def declaration_detail(request, declaration_id):
     total_statements = declaration.statements.count()
     total_transactions = Transaction.objects.filter(statement__declaration=declaration).count()
 
-    # --- MODIFIED: Added is_expense=False ---
     unassigned_transactions = Transaction.objects.filter(
         statement__declaration=declaration,
         declaration_point__isnull=True,
-        is_expense=False  # Only count unassigned INCOME
+        is_expense=False
     ).count()
-    # --- END MODIFIED ---
 
     context = {
         'declaration': declaration,
         'total_statements': total_statements,
         'total_transactions': total_transactions,
-        'unassigned_transactions': unassigned_transactions, # This count is now accurate
+        'unassigned_transactions': unassigned_transactions,
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/declaration_detail.html', context)
@@ -250,6 +248,7 @@ def run_analysis_pending(request, declaration_id):
 # -----------------------------------------------------------
 # 3. GLOBAL (CATEGORY) RULE MANAGEMENT
 # -----------------------------------------------------------
+
 @user_passes_test(is_superadmin)
 def rule_list_global(request):
     queryset = TaxRule.objects.filter(declaration__isnull=True).select_related('declaration_point', 'created_by')
@@ -273,18 +272,39 @@ def rule_list_global(request):
     if sort_by not in valid_sort_fields:
         sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
-    paginator = Paginator(queryset, 25)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+
+    # --- NEW: Pagination Logic ---
+    total_count = queryset.count()
+    default_per_page = 25
+    per_page = request.GET.get('per_page', default_per_page)
+    is_paginated = True
+
+    if per_page == 'all':
+        page_obj = queryset
+        is_paginated = False
+    else:
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = default_per_page
+
+        paginator = Paginator(queryset, per_page)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+    # --- END NEW ---
+
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
+
     context = {
         'rules': page_obj, 'page_obj': page_obj, 'is_global_list': True, 'list_title': "Գլոբալ Կանոններ",
         'is_admin': True, 'search_query': search_query, 'filter_active': filter_active,
-        'filter_proposal': filter_proposal, 'current_sort': sort_by, 'get_params': get_params.urlencode()
+        'filter_proposal': filter_proposal, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
     }
     return render(request, 'tax_processor/rule_list.html', context)
+
 
 @user_passes_test(is_superadmin)
 def rule_create_or_update(request, rule_id=None, declaration_id=None):
@@ -397,6 +417,7 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
     }
     return render(request, 'tax_processor/rule_form.html', context)
 
+
 @user_passes_test(is_permitted_user)
 @require_POST
 def rule_delete(request, rule_id, declaration_id=None):
@@ -417,6 +438,7 @@ def rule_delete(request, rule_id, declaration_id=None):
     rule.delete()
     messages.success(request, f"Tax Rule '{rule_name}' successfully deleted.")
     return redirect(list_url_name, **url_kwargs)
+
 
 # -----------------------------------------------------------
 # 4. DECLARATION-SPECIFIC (CATEGORY) RULE LIST VIEW
@@ -448,20 +470,40 @@ def declaration_rule_list(request, declaration_id):
     if sort_by not in valid_sort_fields:
         sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
-    paginator = Paginator(queryset, 25)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+
+    # --- NEW: Pagination Logic ---
+    total_count = queryset.count()
+    default_per_page = 25
+    per_page = request.GET.get('per_page', default_per_page)
+    is_paginated = True
+
+    if per_page == 'all':
+        page_obj = queryset
+        is_paginated = False
+    else:
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = default_per_page
+
+        paginator = Paginator(queryset, per_page)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+    # --- END NEW ---
+
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
+
     context = {
         'rules': page_obj, 'page_obj': page_obj, 'declaration': declaration,
         'is_global_list': False, 'list_title': f"Կանոններ {declaration.name}-ի համար",
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'filter_proposal': filter_proposal,
-        'current_sort': sort_by, 'get_params': get_params.urlencode()
+        'current_sort': sort_by, 'get_params': get_params.urlencode(),
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
     }
-    return render(request, 'tax_processor/declaration_rule_list.html', context)
+    return render(request, 'tax_processor/rule_list.html', context)
 
 
 # -----------------------------------------------------------
@@ -528,7 +570,6 @@ def user_dashboard(request):
     user = request.user
     queryset = filter_declarations_by_user(user)
 
-    # --- MODIFIED: Added is_expense=False to unmatched_count ---
     queryset = queryset.annotate(
         statement_count=Count('statements', distinct=True),
         total_transactions=Count('statements__transactions', distinct=True),
@@ -536,12 +577,11 @@ def user_dashboard(request):
             'statements__transactions__unmatched_record',
             filter=Q(
                 statements__transactions__unmatched_record__status='PENDING_REVIEW',
-                statements__transactions__is_expense=False # Only count INCOME
+                statements__transactions__is_expense=False
             ),
             distinct=True
         )
     )
-    # --- END MODIFIED ---
 
     search_query = request.GET.get('q', '').strip()
     if search_query:
@@ -562,9 +602,27 @@ def user_dashboard(request):
     if sort_by not in valid_sort_fields:
         sort_by = '-tax_period_start'
     queryset = queryset.order_by(sort_by)
-    paginator = Paginator(queryset, 25)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+
+    # --- NEW: Pagination Logic ---
+    total_count = queryset.count()
+    default_per_page = 25
+    per_page = request.GET.get('per_page', default_per_page)
+    is_paginated = True
+
+    if per_page == 'all':
+        page_obj = queryset
+        is_paginated = False
+    else:
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = default_per_page
+
+        paginator = Paginator(queryset, per_page)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+    # --- END NEW ---
+
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
@@ -573,7 +631,8 @@ def user_dashboard(request):
         'declarations': page_obj, 'page_obj': page_obj,
         'is_admin': is_superadmin(request.user),
         'search_query': search_query, 'filter_status': filter_status,
-        'current_sort': sort_by, 'get_params': get_params.urlencode()
+        'current_sort': sort_by, 'get_params': get_params.urlencode(),
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
     }
     return render(request, 'tax_processor/user_dashboard.html', context)
 
@@ -581,9 +640,6 @@ def user_dashboard(request):
 @user_passes_test(is_permitted_user)
 def review_queue(request, declaration_id=None):
     user = request.user
-    # Base queryset *already* only selects income, since rules_engine
-    # (which creates UnmatchedTransaction) now ignores expenses.
-    # No change needed here.
     queryset = UnmatchedTransaction.objects.filter(status='PENDING_REVIEW')
     is_filtered_by_declaration = False
     title = ""
@@ -603,7 +659,6 @@ def review_queue(request, declaration_id=None):
         queryset = queryset.filter(assigned_user=user)
         title = f"{user.username}'s Pending Reviews"
 
-    # This query is fine, it's already implicitly income-only
     queryset = queryset.select_related(
         'transaction__statement__declaration',
         'transaction__matched_rule',
@@ -627,9 +682,27 @@ def review_queue(request, declaration_id=None):
     if sort_by not in valid_sort_fields:
         sort_by = '-transaction__transaction_date'
     queryset = queryset.order_by(sort_by)
-    paginator = Paginator(queryset, 25)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+
+    # --- NEW: Pagination Logic ---
+    total_count = queryset.count()
+    default_per_page = 25
+    per_page = request.GET.get('per_page', default_per_page)
+    is_paginated = True
+
+    if per_page == 'all':
+        page_obj = queryset
+        is_paginated = False
+    else:
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = default_per_page
+
+        paginator = Paginator(queryset, per_page)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+    # --- END NEW ---
+
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
@@ -639,7 +712,8 @@ def review_queue(request, declaration_id=None):
         'is_admin': is_superadmin(user), 'is_filtered': is_filtered_by_declaration,
         'current_declaration': current_declaration, 'search_query': search_query,
         'filter_user': filter_user, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'hints': hints
+        'hints': hints,
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
     }
 
     if is_superadmin(user) and not declaration_id:
@@ -652,11 +726,9 @@ def resolve_transaction(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
     tx = unmatched_item.transaction
 
-    # --- NEW: Check if it's an expense ---
     if tx.is_expense:
         messages.error(request, "Expenses cannot be resolved.")
         return redirect('all_transactions_list', declaration_id=tx.statement.declaration.id)
-    # --- END NEW ---
 
     declaration = tx.statement.declaration
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
@@ -792,14 +864,11 @@ def tax_report(request, declaration_id):
     declaration_qs = filter_declarations_by_user(request.user)
     declaration = get_object_or_404(declaration_qs, pk=declaration_id)
 
-    # --- MODIFIED: Added is_expense=False ---
-    # We only report on INCOME transactions.
     transactions_qs = Transaction.objects.filter(
         statement__declaration=declaration,
         declaration_point__isnull=False,
         is_expense=False
     ).select_related('declaration_point')
-    # --- END MODIFIED ---
 
     unique_dates = transactions_qs.exclude(currency='AMD').values_list('transaction_date__date', flat=True).distinct()
     unique_currencies = transactions_qs.exclude(currency='AMD').values_list('currency', flat=True).distinct()
@@ -1027,28 +1096,22 @@ def all_transactions_list(request, declaration_id):
         if filter_status == 'ASSIGNED':
             queryset = queryset.filter(declaration_point__isnull=False)
         elif filter_status == 'PENDING':
-            # --- MODIFIED: Added is_expense=False ---
             queryset = queryset.filter(
                 Q(declaration_point__isnull=True) &
                 Q(unmatched_record__status='PENDING_REVIEW') &
                 Q(is_expense=False)
             )
-            # --- END MODIFIED ---
         elif filter_status == 'PROPOSED':
-            # --- MODIFIED: Added is_expense=False ---
             queryset = queryset.filter(
                 Q(unmatched_record__status='NEW_RULE_PROPOSED') &
                 Q(is_expense=False)
             )
-            # --- END MODIFIED ---
         elif filter_status == 'UNPROCESSED':
-             # --- MODIFIED: Added is_expense=False ---
              queryset = queryset.filter(
                 Q(declaration_point__isnull=True) &
                 Q(unmatched_record__isnull=True) &
                 Q(is_expense=False)
             )
-            # --- END MODIFIED ---
 
     sort_by = request.GET.get('sort', '-transaction_date')
     valid_sort_fields = [
@@ -1059,18 +1122,38 @@ def all_transactions_list(request, declaration_id):
     if sort_by not in valid_sort_fields:
         sort_by = '-transaction_date'
     queryset = queryset.order_by(sort_by)
-    paginator = Paginator(queryset, 50)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+
+    # --- NEW: Pagination Logic ---
+    total_count = queryset.count()
+    default_per_page = 50 # Default 50 for this specific page
+    per_page = request.GET.get('per_page', default_per_page)
+    is_paginated = True
+
+    if per_page == 'all':
+        page_obj = queryset
+        is_paginated = False
+    else:
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = default_per_page
+
+        paginator = Paginator(queryset, per_page)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+    # --- END NEW ---
+
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
+
     context = {
         'declaration': declaration, 'page_obj': page_obj, 'search_query': search_query, 'current_sort': sort_by,
         'is_admin': is_superadmin(request.user), 'get_params': get_params.urlencode(),
         'filter_type': filter_type, 'filter_entity': filter_entity, 'filter_scope': filter_scope,
         'filter_status': filter_status, 'entity_choices': Transaction.ENTITY_CHOICES,
         'scope_choices': Transaction.SCOPE_CHOICES,
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
     }
     return render(request, 'tax_processor/all_transactions_list.html', context)
 
@@ -1081,11 +1164,9 @@ def edit_transaction(request, transaction_id):
     ), pk=transaction_id)
     declaration = transaction_obj.statement.declaration
 
-    # --- NEW: Check if it's an expense ---
     if transaction_obj.is_expense:
         messages.error(request, "Expenses cannot be edited or resolved.")
         return redirect('all_transactions_list', declaration_id=declaration.pk)
-    # --- END NEW ---
 
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "Դուք իրավասու չեք խմբագրելու այս գործարքը։")
@@ -1168,9 +1249,27 @@ def entity_rule_list(request, declaration_id=None):
     valid_sort_fields = ['priority', '-priority', 'rule_name', '-rule_name', 'entity_type_result', '-entity_type_result', 'is_active', '-is_active', 'created_at', '-created_at']
     if sort_by not in valid_sort_fields: sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
-    paginator = Paginator(queryset, 25)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+
+    # --- NEW: Pagination Logic ---
+    total_count = queryset.count()
+    default_per_page = 25
+    per_page = request.GET.get('per_page', default_per_page)
+    is_paginated = True
+
+    if per_page == 'all':
+        page_obj = queryset
+        is_paginated = False
+    else:
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = default_per_page
+
+        paginator = Paginator(queryset, per_page)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+    # --- END NEW ---
+
     get_params = request.GET.copy()
     if 'page' in get_params: del get_params['page']
 
@@ -1179,7 +1278,8 @@ def entity_rule_list(request, declaration_id=None):
         'is_global_list': not is_specific, 'list_title': list_title,
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'rule_type': 'entity'
+        'rule_type': 'entity',
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
     }
     return render(request, 'tax_processor/entity_rule_list.html', context)
 
@@ -1337,9 +1437,27 @@ def scope_rule_list(request, declaration_id=None):
     valid_sort_fields = ['priority', '-priority', 'rule_name', '-rule_name', 'scope_result', '-scope_result', 'is_active', '-is_active', 'created_at', '-created_at']
     if sort_by not in valid_sort_fields: sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
-    paginator = Paginator(queryset, 25)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+
+    # --- NEW: Pagination Logic ---
+    total_count = queryset.count()
+    default_per_page = 25
+    per_page = request.GET.get('per_page', default_per_page)
+    is_paginated = True
+
+    if per_page == 'all':
+        page_obj = queryset
+        is_paginated = False
+    else:
+        try:
+            per_page = int(per_page)
+        except ValueError:
+            per_page = default_per_page
+
+        paginator = Paginator(queryset, per_page)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+    # --- END NEW ---
+
     get_params = request.GET.copy()
     if 'page' in get_params: del get_params['page']
 
@@ -1348,7 +1466,8 @@ def scope_rule_list(request, declaration_id=None):
         'is_global_list': not is_specific, 'list_title': list_title,
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'rule_type': 'scope'
+        'rule_type': 'scope',
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
     }
     return render(request, 'tax_processor/scope_rule_list.html', context)
 

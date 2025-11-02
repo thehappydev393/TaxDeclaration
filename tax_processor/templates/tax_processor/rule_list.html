@@ -215,21 +215,7 @@
         </tbody>
     </table>
 
-    <div class="pagination">
-        {% if page_obj.has_previous %}
-        <a href="?page=1&{{ get_params }}">&laquo; Առաջին</a> {# First #}
-        <a href="?page={{ page_obj.previous_page_number }}&{{ get_params }}">Նախորդ</a> {# Previous #}
-        {% endif %}
-
-        <span class="current">
-            Էջ {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}. {# Page ... of ... #}
-        </span>
-
-        {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}&{{ get_params }}">Հաջորդ</a> {# Next #}
-        <a href="?page={{ page_obj.paginator.num_pages }}&{{ get_params }}">Վերջին &raquo;</a> {# Last #}
-        {% endif %}
-    </div>
+    {% include "tax_processor/pagination_controls.html" %}
 
 </div>
 </body>

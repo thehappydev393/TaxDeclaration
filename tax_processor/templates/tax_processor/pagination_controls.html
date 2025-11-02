@@ -1,0 +1,91 @@
+{% load static %}
+
+<style>
+    .pagination-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 25px;
+    }
+    .pagination-controls {
+        text-align: center;
+    }
+    .pagination-controls a, .pagination-controls .current {
+        display: inline-block;
+        padding: 6px 12px;
+        margin: 0 2px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #007bff;
+    }
+    .pagination-controls .current {
+        background-color: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    .pagination-controls a:hover {
+        background-color: #f0f0f0;
+    }
+    .per-page-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .per-page-controls label {
+        font-size: 0.9em;
+        font-weight: 600;
+        color: #495057;
+    }
+    .per-page-controls select {
+        padding: 6px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+</style>
+
+<div class="pagination-container">
+    <div class="per-page-controls">
+        <label for="per-page-select">Ցուցադրել:</label>
+        <select id="per-page-select">
+            <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+            <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+            <option value="all" {% if per_page == 'all' %}selected{% endif %}>Բոլորը</option>
+        </select>
+        <span style="font-size: 0.9em; color: #6c757d;">(Ընդհանուր: {{ total_count }})</span>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination-controls">
+        {% if page_obj.has_previous %}
+        <a href="?page=1&{{ get_params }}">&laquo; Առաջին</a>
+        <a href="?page={{ page_obj.previous_page_number }}&{{ get_params }}">Նախորդ</a>
+        {% endif %}
+
+        <span class="current">
+            Էջ {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}.
+        </span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&{{ get_params }}">Հաջորդ</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}&{{ get_params }}">Վերջին &raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    document.getElementById('per-page-select').addEventListener('change', function() {
+        var perPage = this.value;
+        var url = new URL(window.location.href);
+
+        // Set new per_page value
+        url.searchParams.set('per_page', perPage);
+
+        // Reset to page 1 to avoid invalid page numbers
+        url.searchParams.set('page', '1');
+
+        window.location.href = url.toString();
+    });
+</script>
