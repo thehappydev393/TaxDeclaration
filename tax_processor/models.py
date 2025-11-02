@@ -310,3 +310,31 @@ class ExchangeRate(models.Model):
         verbose_name_plural = "Exchange Rates"
         unique_together = ('date', 'currency_code')
         ordering = ['-date', 'currency_code']
+
+# ====================================================================
+# 10. ANALYSIS HINTS (NEW)
+# ====================================================================
+class AnalysisHint(models.Model):
+    declaration = models.ForeignKey(
+        Declaration,
+        on_delete=models.CASCADE,
+        related_name='hints'
+    )
+    HINT_TYPES = (
+        ('SENDER', 'Frequent Sender'),
+        ('DESCRIPTION', 'Similar Description'),
+        ('AMOUNT', 'Large Amount'),
+    )
+    hint_type = models.CharField(max_length=20, choices=HINT_TYPES)
+    title = models.CharField(max_length=255) # e.g., "Frequent Sender: John Smith"
+    description = models.TextField() # e.g., "12 transactions totaling 450,000 AMD"
+    related_transaction_ids = models.JSONField(default=list) # List of [tx.id, tx.id, ...]
+    is_resolved = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"[{self.declaration.name}] {self.hint_type}: {self.title}"
+
+    class Meta:
+        verbose_name = "Analysis Hint"
+        verbose_name_plural = "Analysis Hints"
+        ordering = ['-id']

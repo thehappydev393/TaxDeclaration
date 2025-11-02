@@ -8,7 +8,8 @@ from django.urls import reverse
 from .models import (
     UserProfile, Declaration, Statement, TaxRule,
     Transaction, UnmatchedTransaction, DeclarationPoint,
-    EntityTypeRule, TransactionScopeRule, ExchangeRate # NEW: Import ExchangeRate
+    EntityTypeRule, TransactionScopeRule, ExchangeRate,
+    AnalysisHint # <-- NEW: Import AnalysisHint
 )
 
 # -----------------------------------------------------------
@@ -204,4 +205,13 @@ class ExchangeRateAdmin(admin.ModelAdmin):
     list_filter = ('currency_code', 'date')
     search_fields = ('currency_code',)
     ordering = ('-date', 'currency_code')
+# --- END NEW ---
+
+# --- NEW: Register AnalysisHint Admin ---
+@admin.register(AnalysisHint)
+class AnalysisHintAdmin(admin.ModelAdmin):
+    list_display = ('declaration', 'hint_type', 'title', 'is_resolved')
+    list_filter = ('declaration', 'hint_type', 'is_resolved')
+    search_fields = ('title', 'description')
+    readonly_fields = ('declaration', 'hint_type', 'title', 'description', 'related_transaction_ids')
 # --- END NEW ---

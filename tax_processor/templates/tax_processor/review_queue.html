@@ -37,6 +37,49 @@
         .footer-nav { margin-top: 20px; }
         .description-cell { max-width: 400px; word-wrap: break-word; }
 
+        /* --- NEW: Hint Box Styles --- */
+        .hint-section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #fff8e1;
+            border: 1px solid #ffeeba;
+            border-radius: 6px;
+        }
+        .hint-section h2 {
+            font-size: 1.2em;
+            color: #856404;
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ffeeba;
+            padding-bottom: 5px;
+        }
+        .hint-box {
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #eee;
+            border-left: 4px solid #ffc107;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .hint-box-content p { margin: 2px 0; }
+        .hint-box-content .hint-title { font-weight: bold; color: #333; }
+        .hint-box-content .hint-description { font-size: 0.9em; color: #555; }
+        .hint-box-action .btn-view {
+            padding: 5px 10px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .hint-box-action .btn-view:hover { background-color: #0056b3; }
+        /* --- END NEW --- */
+
         /* Pagination */
         .pagination { margin-top: 25px; text-align: center; }
         .pagination a, .pagination .current { display: inline-block; padding: 6px 12px; margin: 0 2px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #007bff; }
@@ -62,6 +105,24 @@
     </ul>
     {% endif %}
 
+    {% if is_filtered and hints %}
+    <div class="hint-section">
+        <h2>💡 Վերլուծության ակնարկներ (Analysis Hints)</h2>
+        {% for hint in hints %}
+        <div class="hint-box">
+            <div class="hint-box-content">
+                <p class="hint-title">{{ hint.title }}</p>
+                <p class="hint-description">{{ hint.description }}</p>
+            </div>
+            <div class="hint-box-action">
+                <a href="{% url 'all_transactions_list' declaration_id=current_declaration.id %}?tx_ids={{ hint.related_transaction_ids|join:',' }}" target="_blank" class="btn-view">
+                    Դիտել Գործարքները
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
     <form method="get" action="" class="filter-form">
         <div class="form-group">
             <label for="q">Որոնել</label>
