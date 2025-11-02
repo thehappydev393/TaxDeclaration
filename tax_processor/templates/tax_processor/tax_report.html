@@ -1,35 +1,67 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hy">
 <head>
     <meta charset="UTF-8">
     <title>Հարկային Հայտարարգիր: {{ declaration.name }}</title>
     <style>
-        /* ... (all your existing CSS styles) ... */
+        /* NEW: Classic table styles */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; font-size: 14px;}
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        h1 { color: #007bff; font-size: 1.8em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 15px; }
+        h2 { font-size: 1.5em; color: #343a40; margin-top: 30px; margin-bottom: 15px; background-color: #e9ecef; padding: 10px; border-radius: 4px;}
 
-        /* NEW/MODIFIED styles for totals */
-        .total-row {
-            background-color: #e6f7ff;
-            font-weight: bold;
+        .summary-header {
             font-size: 1.1em;
-            border-top: 2px solid #007bff;
-        }
-        .total-row.sub-total { /* Style for per-currency totals */
-            background-color: #f4f4f4;
+            color: #555;
+            margin-top: 0;
+            margin-bottom: 20px;
             font-weight: normal;
-            font-size: 1em;
-            border-top: 1px solid #ccc;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
         }
+        .summary-header strong { color: #000; }
+        .summary-header span { margin-right: 20px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.95em; }
+        th, td { padding: 12px 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+        th { background-color: #343a40; color: white; font-weight: 600; white-space: nowrap; }
+
+        .footer-nav { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
+        .footer-nav a { color: #007bff; text-decoration: none; margin-right: 15px; }
+
+        /* Report-specific styles */
+        .amount-amd { font-weight: 600; }
+        .amount-original { font-size: 0.9em; color: #6c757d; white-space: nowrap; }
+
         .total-row-header {
             background-color: #343a40;
             color: white;
             font-size: 1.2em;
             border-top: 3px solid #007bff;
         }
-        .total-row-header td {
-            padding-top: 15px;
-            padding-bottom: 15px;
+        .total-row-header td { padding-top: 15px; padding-bottom: 15px; }
+        .total-row {
+            background-color: #f4f4f4;
+            font-weight: bold;
+            font-size: 1em;
+            border-top: 1px solid #ccc;
         }
+
+        /* --- NEW: Style for the auto-filled tag --- */
+        .auto-filled-tag {
+            font-size: 0.8em;
+            font-weight: 600;
+            color: #17a2b8;
+            background-color: #e0f7fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+        /* --- END NEW --- */
     </style>
 </head>
 <body>
@@ -42,64 +74,113 @@
         <strong>Ժամանակահատված:</strong> <span>{{ declaration.tax_period_start|date:"Y-m-d" }} - {{ declaration.tax_period_end|date:"Y-m-d" }}</span>
     </div>
 
-    {% if report_data %}
-    <h2>Վերլուծության Արդյունքները</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Կատեգորիա (Հաշվետու կետ)</th>
-            <th>Տեսակ</th>
-            <th>Գործարքների Քանակ</th>
-            <th>Արժույթ</th> <th>Ընդհանուր Գումար</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% regroup report_data by declaration_point__is_income as report_by_type %}
-
-        {% for group in report_by_type %}
-
-        <tr class="{% if group.grouper %}income-group{% else %}expense-group{% endif %}">
-            <td colspan="5" style="font-size: 1.2em; font-weight: bold; background-color: #f0f0f0;"> {% if group.grouper %}
-                ԵԿԱՄՈՒՏՆԵՐ (INCOME)
-                {% else %}
-                ԾԱԽՍԵՐ ԵՎ ՈՉ-ՀԱՐԿՎՈՂ (EXPENSES / NON-TAXABLE)
-                {% endif %}
-            </td>
-        </tr>
-
-        {% for item in group.list %}
-        <tr class="{% if group.grouper %}income-row{% else %}expense-row{% endif %}">
-            <td>{{ item.declaration_point__name }} - {{ item.declaration_point__description }}</td>
-            <td>{% if group.grouper %}Եկամուտ{% else %}Ծախս/Ոչ-հարկվող{% endif %}</td>
-            <td>{{ item.transaction_count }}</td>
-            <td><strong>{{ item.currency }}</strong></td> <td>{{ item.total_amount|floatformat:2 }}</td>
-        </tr>
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message|safe }}</li>
         {% endfor %}
+    </ul>
+    {% endif %}
 
-        {% endfor %}
-
-        <tr class="total-row-header">
-            <td colspan="5">ԸՆԴՀԱՆՈՒՐ ԱՄՓՈՓՈՒՄ (ըստ արժույթի)</td>
-        </tr>
-        {% for total in currency_totals %}
-        <tr class="total-row sub-total">
-            <td colspan="3" style="text-align: right;">Ընդհանուր գումար՝</td>
-            <td><strong>{{ total.currency }}</strong></td>
-            <td><strong>{{ total.total_amount|floatformat:2 }}</strong></td>
-        </tr>
-        {% empty %}
-        <tr class="total-row sub-total">
-            <td colspan="5">Ամփոփ տվյալներ չկան:</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {% else %}
+    {% if not reportable_items and not non_reportable_items %}
     <p style="padding: 15px; background-color: #ffe0e0; border-left: 5px solid red;">
         ⚠️ Այս հայտարարագրի համար դեռևս չկան համընկած կամ լուծված գործարքներ։ Խնդրում ենք կատարել վերլուծություն կամ վերանայել սպասվող գործարքները։
     </p>
     {% endif %}
+
+    <h2>Հայտարարագրվող Գործարքներ</h2>
+    {% if reportable_items %}
+    <table>
+        <thead>
+        <tr>
+            <th>Կատեգորիա (Հաշվետու կետ)</th>
+            <th>Գործարքների Քանակ</th>
+            <th>Ընդհանուր Գումար (ՀՀ ԴՐԱՄՈՎ)</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in reportable_items %}
+        <tr>
+            <td>
+                <strong>{{ item.point_name }}</strong>
+                {% if item.is_auto_filled %}
+                <span class="auto-filled-tag">Ավտո-լրացվող</span>
+                {% endif %}
+                <br>
+                <small style="color: #6c757d;">{{ item.point_description }}</small>
+            </td>
+            <td>{{ item.transaction_count }}</td>
+            <td>
+                <div class="amount-amd">{{ item.total_amount_amd|floatformat:2 }} Դ</div>
+                {% if item.currency != "AMD" %}
+                <div class="amount-original">({{ item.total_amount_original|floatformat:2 }} {{ item.currency }})</div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Հայտարարագրվող գործարքներ չեն գտնվել։</p>
+    {% endif %}
+
+    <h2>Չհայտարարագրվող Գործարքներ</h2>
+    {% if non_reportable_items %}
+    <table>
+        <thead>
+        <tr>
+            <th>Կատեգորիա (Հաշվետու կետ)</th>
+            <th>Գործարքների Քանակ</th>
+            <th>Ընդհանուր Գումար (ՀՀ ԴՐԱՄՈՎ)</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in non_reportable_items %}
+        <tr>
+            <td>
+                <strong>{{ item.point_name }}</strong>
+                {% if item.is_auto_filled %}
+                <span class="auto-filled-tag">Ավտո-լրացվող</span>
+                {% endif %}
+                <br>
+                <small style="color: #6c757d;">{{ item.point_description }}</small>
+            </td>
+            <td>{{ item.transaction_count }}</td>
+            <td>
+                <div class="amount-amd">{{ item.total_amount_amd|floatformat:2 }} Դ</div>
+                {% if item.currency != "AMD" %}
+                <div class="amount-original">({{ item.total_amount_original|floatformat:2 }} {{ item.currency }})</div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Չհայտարարագրվող գործարքներ չեն գտնվել։</p>
+    {% endif %}
+
+
+    <h2>ԸՆԴՀԱՆՈՒՐ ԱՄՓՈՓՈՒՄ (ըստ արժույթի)</h2>
+    <table>
+        <thead>
+        <tr class="total-row-header">
+            <td colspan="2">Ընդհանուր գումար (ըստ բնօրինակ արժույթի)</td>
+        </tr>
+        </thead>
+        <tbody>
+        {% for total in currency_totals %}
+        <tr class="total-row">
+            <td style="text-align: right;"><strong>{{ total.currency }}</strong></td>
+            <td><strong>{{ total.total_amount|floatformat:2 }}</strong></td>
+        </tr>
+        {% empty %}
+        <tr class="total-row">
+            <td colspan="2">Ամփոփ տվյալներ չկան:</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 
     <div class="footer-nav">
         <a href="{% url 'declaration_detail' declaration.pk %}">← Վերադառնալ Մանրամասներ</a>

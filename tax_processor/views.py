@@ -7,19 +7,17 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Q, Count, Sum
 from django.utils import timezone
-# --- UPDATED: Import new forms ---
 from .forms import (
     StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet,
     AddStatementsForm, TransactionEditForm, EntityTypeRuleForm, TransactionScopeRuleForm
 )
-# --- END UPDATED ---
 from .services import import_statement_service
 from .rules_engine import RulesEngine
 from .entity_type_rules_engine import EntityTypeRulesEngine
 from .transaction_scope_rules_engine import TransactionScopeRulesEngine
 from .models import (
     Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile, DeclarationPoint,
-    EntityTypeRule, TransactionScopeRule
+    EntityTypeRule, TransactionScopeRule, ExchangeRate # IMPORT ExchangeRate
 )
 from .parser_logic import BANK_KEYWORDS
 from datetime import date
@@ -29,6 +27,10 @@ from django.db import transaction as db_transaction
 from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+# --- NEW: Import for collections ---
+from collections import defaultdict
+from decimal import Decimal
+# --- END NEW ---
 
 BANK_NAMES_LIST = sorted(list(BANK_KEYWORDS.keys()))
 
@@ -492,8 +494,10 @@ def user_dashboard(request):
     get_params = request.GET.copy()
     if 'page' in get_params:
         del get_params['page']
+
     context = {
-        'declarations': page_obj, 'page_obj': page_obj, 'is_admin': is_superadmin(user),
+        'declarations': page_obj, 'page_obj': page_obj,
+        'is_admin': is_superadmin(request.user),
         'search_query': search_query, 'filter_status': filter_status,
         'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
@@ -671,19 +675,130 @@ def resolve_transaction(request, unmatched_id):
     return render(request, 'tax_processor/resolve_transaction.html', context)
 
 
+# --- UPDATED: tax_report view ---
 @user_passes_test(is_permitted_user)
 def tax_report(request, declaration_id):
-    declaration_qs = filter_declarations_by_user(request.user); declaration = get_object_or_404(declaration_qs, pk=declaration_id)
-    transactions_qs = Transaction.objects.filter(statement__declaration=declaration, declaration_point__isnull=False)
-    report_data = transactions_qs.values('declaration_point__name', 'declaration_point__description', 'declaration_point__is_income','currency').annotate(total_amount=Sum('amount'), transaction_count=Count('pk')).order_by('declaration_point__is_income', 'declaration_point__name','currency')
-    currency_totals = transactions_qs.values('currency').annotate(total_amount=Sum('amount')).order_by('currency')
+    declaration_qs = filter_declarations_by_user(request.user)
+    declaration = get_object_or_404(declaration_qs, pk=declaration_id)
+
+    # 1. Get all categorized transactions
+    transactions_qs = Transaction.objects.filter(
+        statement__declaration=declaration,
+        declaration_point__isnull=False
+    ).select_related('declaration_point')
+
+    # 2. Get all unique dates and currencies for exchange rate lookup
+    unique_dates = transactions_qs.exclude(currency='AMD').values_list('transaction_date__date', flat=True).distinct()
+    unique_currencies = transactions_qs.exclude(currency='AMD').values_list('currency', flat=True).distinct()
+
+    # 3. Fetch all required exchange rates in one query
+    rates_qs = ExchangeRate.objects.filter(
+        date__in=unique_dates,
+        currency_code__in=unique_currencies
+    )
+
+    # Build a fast lookup dictionary: {(date, 'USD'): 404.5}
+    rates_dict = {
+        (rate.date, rate.currency_code): rate.rate
+        for rate in rates_qs
+    }
+
+    # 4. Process transactions
+    reportable_groups = defaultdict(lambda: defaultdict(lambda: {'total_amd': Decimal(0), 'total_original': Decimal(0), 'count': 0}))
+    non_reportable_groups = defaultdict(lambda: defaultdict(lambda: {'total_amd': Decimal(0), 'total_original': Decimal(0), 'count': 0}))
+    currency_totals = defaultdict(lambda: Decimal(0))
+    missing_rates = set()
+
+    for tx in transactions_qs:
+        tx_date = tx.transaction_date.date()
+        currency = tx.currency
+        amount = tx.amount
+
+        currency_totals[currency] += amount
+
+        rate = Decimal(1.0)
+        amd_equivalent = amount # Default for AMD
+
+        if currency != 'AMD':
+            rate = rates_dict.get((tx_date, currency))
+            if rate is None:
+                # Rate not found for this date, try to find the closest previous one
+                closest_rate = ExchangeRate.objects.filter(
+                    currency_code=currency,
+                    date__lt=tx_date
+                ).order_by('-date').first()
+
+                if closest_rate:
+                    rate = closest_rate.rate
+                    rates_dict[(tx_date, currency)] = rate # Cache it for this run
+                else:
+                    missing_rates.add(f"{tx_date} ({currency})")
+                    rate = Decimal(1.0) # Failsafe
+
+            amd_equivalent = amount * rate
+
+        # Get the group this tx belongs to
+        point = tx.declaration_point
+        point_key = point.id
+
+        # Decide which master group to add to
+        if point.is_income: # This is the "Reportable" flag
+            group = reportable_groups
+        else:
+            group = non_reportable_groups
+
+        # Aggregate data
+        # We group by DeclarationPoint ID, then by currency
+        group_data = group[point_key][currency]
+        group_data['total_amd'] += amd_equivalent
+        group_data['total_original'] += amount
+        group_data['count'] += 1
+        # Store point info once, including the new is_auto_filled flag
+        group[point_key]['point_info'] = {
+            'name': point.name,
+            'description': point.description,
+            'is_auto_filled': point.is_auto_filled
+        }
+
+
+    if missing_rates:
+        messages.warning(request, f"Could not find exchange rates for the following dates/currencies: {', '.join(missing_rates)}. Used last available rate or 1.0 as fallback.")
+
+    # 5. Format data for template
+    def format_group_data(group_dict):
+        final_list = []
+        for point_id, currencies in group_dict.items():
+            point_info = currencies.pop('point_info') # Get the point object
+            for currency, data in currencies.items():
+                final_list.append({
+                    'point_name': point_info['name'],
+                    'point_description': point_info['description'],
+                    'is_auto_filled': point_info['is_auto_filled'], # Pass flag to template
+                    'currency': currency,
+                    'transaction_count': data['count'],
+                    'total_amount_amd': data['total_amd'],
+                    'total_amount_original': data['total_original'],
+                })
+        return sorted(final_list, key=lambda x: x['point_name'])
+
+    reportable_items = format_group_data(reportable_groups)
+    non_reportable_items = format_group_data(non_reportable_groups)
+
+    # Format currency totals for template
+    final_currency_totals = [
+        {'currency': code, 'total_amount': total}
+        for code, total in sorted(currency_totals.items())
+    ]
+
     context = {
         'declaration': declaration,
-        'report_data': report_data,
-        'currency_totals': currency_totals,
+        'reportable_items': reportable_items,
+        'non_reportable_items': non_reportable_items,
+        'currency_totals': final_currency_totals,
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/tax_report.html', context)
+# --- END UPDATED VIEW ---
 
 
 # -----------------------------------------------------------
@@ -874,11 +989,12 @@ def edit_transaction(request, transaction_id):
     return render(request, 'tax_processor/edit_transaction.html', context)
 
 
-# --- NEW: EntityTypeRule Views ---
+# -----------------------------------------------------------
+# 9. EntityTypeRule Views
+# -----------------------------------------------------------
 
 @user_passes_test(is_superadmin)
 def entity_rule_list(request, declaration_id=None):
-    """Lists global or specific EntityTypeRules."""
     is_specific = declaration_id is not None
     declaration = None
     if is_specific:
@@ -894,8 +1010,6 @@ def entity_rule_list(request, declaration_id=None):
         list_title = "Global Entity Type Rules"
 
     queryset = queryset.select_related('declaration', 'created_by')
-
-    # --- Search, Filter, Sort, Paginate (re-using logic) ---
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(rule_name__icontains=search_query)
@@ -917,14 +1031,12 @@ def entity_rule_list(request, declaration_id=None):
         'is_global_list': not is_specific, 'list_title': list_title,
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'rule_type': 'entity' # For template URLs
+        'rule_type': 'entity'
     }
-    # We'll create 'entity_rule_list.html' next
     return render(request, 'tax_processor/entity_rule_list.html', context)
 
 @user_passes_test(is_superadmin)
 def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
-    """Creates or updates an EntityTypeRule (global or specific)."""
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
@@ -973,9 +1085,6 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
                  return redirect(list_url_name, **url_kwargs)
             except IntegrityError:
                  messages.error(request, f"An entity rule named '{new_rule.rule_name}' already exists for this scope.")
-                 # Re-render context
-        # else:
-             # Fall through to re-render context on invalid form
 
     else: # GET request
         initial_form_data = {}; initial_formset_data = []
@@ -992,9 +1101,8 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'declaration': declaration, 'is_specific_rule': is_specific_rule,
         'list_url_name': list_url_name, 'url_kwargs': url_kwargs,
         'bank_names': BANK_NAMES_LIST, 'is_admin': is_superadmin(request.user),
-        'rule_type': 'entity' # For template URLs
+        'rule_type': 'entity'
     }
-    # Re-use the main rule_form.html template
     return render(request, 'tax_processor/rule_form.html', context)
 
 @user_passes_test(is_permitted_user)
@@ -1020,11 +1128,12 @@ def entity_rule_delete(request, rule_id, declaration_id=None):
     return redirect(list_url_name, **url_kwargs)
 
 
-# --- NEW: TransactionScopeRule Views ---
+# -----------------------------------------------------------
+# 10. TransactionScopeRule Views
+# -----------------------------------------------------------
 
 @user_passes_test(is_superadmin)
 def scope_rule_list(request, declaration_id=None):
-    """Lists global or specific TransactionScopeRules."""
     is_specific = declaration_id is not None
     declaration = None
     if is_specific:
@@ -1040,8 +1149,6 @@ def scope_rule_list(request, declaration_id=None):
         list_title = "Global Transaction Scope Rules"
 
     queryset = queryset.select_related('declaration', 'created_by')
-
-    # --- Search, Filter, Sort, Paginate (re-using logic) ---
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(rule_name__icontains=search_query)
@@ -1063,19 +1170,16 @@ def scope_rule_list(request, declaration_id=None):
         'is_global_list': not is_specific, 'list_title': list_title,
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'rule_type': 'scope' # For template URLs
+        'rule_type': 'scope'
     }
-    # We'll create 'scope_rule_list.html' next
     return render(request, 'tax_processor/scope_rule_list.html', context)
 
 @user_passes_test(is_superadmin)
 def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
-    """Creates or updates a TransactionScopeRule (global or specific)."""
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
     title = ""
-
     if is_specific_rule:
         declaration = get_object_or_404(Declaration, pk=declaration_id)
         if not (is_superadmin(request.user) or declaration.created_by == request.user):
@@ -1119,9 +1223,6 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
                  return redirect(list_url_name, **url_kwargs)
             except IntegrityError:
                  messages.error(request, f"A scope rule named '{new_rule.rule_name}' already exists for this scope.")
-                 # Re-render context
-        # else:
-             # Fall through to re-render context on invalid form
 
     else: # GET request
         initial_form_data = {}; initial_formset_data = []
@@ -1138,9 +1239,8 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'declaration': declaration, 'is_specific_rule': is_specific_rule,
         'list_url_name': list_url_name, 'url_kwargs': url_kwargs,
         'bank_names': BANK_NAMES_LIST, 'is_admin': is_superadmin(request.user),
-        'rule_type': 'scope' # For template URLs
+        'rule_type': 'scope'
     }
-    # Re-use the main rule_form.html template
     return render(request, 'tax_processor/rule_form.html', context)
 
 @user_passes_test(is_permitted_user)
