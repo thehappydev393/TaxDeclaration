@@ -7,7 +7,6 @@ from django.db.models import F
 # ====================================================================
 # 1. USER AND ROLE MANAGEMENT
 # ====================================================================
-
 class UserProfile(models.Model):
     ROLE_CHOICES = (
         ('SUPERADMIN', 'Superadmin'),
@@ -31,11 +30,9 @@ class UserProfile(models.Model):
         verbose_name = "User Profile"
         verbose_name_plural = "User Profiles"
 
-
 # ====================================================================
 # 2. DECLARATION ENTITY
 # ====================================================================
-
 class Declaration(models.Model):
     created_by = models.ForeignKey(
         User,
@@ -61,11 +58,9 @@ class Declaration(models.Model):
         verbose_name = "Declaration Entity"
         verbose_name_plural = "Declaration Entities"
 
-
 # ====================================================================
 # 3. STATEMENT METADATA
 # ====================================================================
-
 class Statement(models.Model):
     declaration = models.ForeignKey(
         Declaration,
@@ -101,11 +96,9 @@ class DeclarationPoint(models.Model):
         verbose_name_plural = "Declaration Points (Categories)"
         ordering = ['name']
 
-
 # ====================================================================
 # 5. TAX RULES
 # ====================================================================
-
 class TaxRule(models.Model):
     rule_name = models.CharField(max_length=255)
     priority = models.IntegerField(default=100, help_text="Lower number means higher priority (processed first).")
@@ -141,11 +134,9 @@ class TaxRule(models.Model):
         unique_together = ('declaration', 'rule_name')
         ordering = ['priority', 'rule_name']
 
-
 # ====================================================================
 # 6. TRANSACTION DATA
 # ====================================================================
-
 class Transaction(models.Model):
     ENTITY_CHOICES = (
         ('UNDETERMINED', 'Անորոշ'),
@@ -162,6 +153,16 @@ class Transaction(models.Model):
     # Core Data
     transaction_date = models.DateTimeField()
     provision_date = models.DateTimeField(null=True, blank=True)
+
+    # --- NEW FIELD ---
+    date_from_description = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Date from Description",
+        help_text="Date parsed from the transaction description, if available."
+    )
+    # --- END NEW FIELD ---
+
     amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Absolute value of the transaction (always positive)")
     currency = models.CharField(max_length=10)
     description = models.TextField()
@@ -200,11 +201,9 @@ class Transaction(models.Model):
         verbose_name_plural = "Transaction Records"
         ordering = ['-transaction_date']
 
-
 # ====================================================================
 # 7. UNMATCHED TRANSACTIONS
 # ====================================================================
-
 class UnmatchedTransaction(models.Model):
     transaction = models.OneToOneField(
         Transaction,
@@ -234,11 +233,9 @@ class UnmatchedTransaction(models.Model):
         verbose_name_plural = "Unmatched Transactions"
         ordering = ['status']
 
-
 # ====================================================================
 # 8. NEW RULE MODELS
 # ====================================================================
-
 class EntityTypeRule(models.Model):
     rule_name = models.CharField(max_length=255)
     priority = models.IntegerField(default=100, help_text="Lower number means higher priority.")
@@ -268,7 +265,6 @@ class EntityTypeRule(models.Model):
         verbose_name_plural = "Rules (Entity Type)"
         unique_together = ('declaration', 'rule_name')
         ordering = ['priority', 'rule_name']
-
 
 class TransactionScopeRule(models.Model):
     rule_name = models.CharField(max_length=255)
@@ -300,22 +296,17 @@ class TransactionScopeRule(models.Model):
         unique_together = ('declaration', 'rule_name')
         ordering = ['priority', 'rule_name']
 
-# --- NEW: ExchangeRate Model ---
+# ====================================================================
+# 9. EXCHANGE RATE MODEL
+# ====================================================================
 class ExchangeRate(models.Model):
-    """
-    Stores historical daily exchange rates from the Central Bank.
-    """
     date = models.DateField(verbose_name="Date")
     currency_code = models.CharField(max_length=3, verbose_name="Currency Code") # e.g., "USD"
     rate = models.DecimalField(max_digits=10, decimal_places=4, verbose_name="Rate (per 1 unit of foreign currency)")
-
     def __str__(self):
         return f"{self.date} - {self.currency_code}: {self.rate}"
-
     class Meta:
         verbose_name = "Exchange Rate"
         verbose_name_plural = "Exchange Rates"
-        # Ensure we only have one rate per currency per day
         unique_together = ('date', 'currency_code')
         ordering = ['-date', 'currency_code']
-# --- END NEW ---

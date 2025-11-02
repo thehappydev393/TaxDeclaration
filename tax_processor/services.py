@@ -14,14 +14,15 @@ from .parser_logic import (
     identify_bank_from_text,
     find_header_start_index
 )
+import pandas as pd
 
 def import_statement_service(uploaded_file, declaration_obj: Declaration, user: User):
     """
     Handles file saving, parsing, normalization, and saving transactions to the DB.
-    (MODIFIED: to include is_expense)
+    (MODIFIED: to include date_from_description)
     """
 
-    # --- 1. Prepare File Content (unchanged) ---
+    # --- 1. Prepare File Content ---
     filename = uploaded_file.name
     file_content = uploaded_file.read()
 
@@ -35,7 +36,7 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
 
     try:
         with transaction.atomic():
-            # --- 2. Run Pre-Parsing Logic (unchanged) ---
+            # --- 2. Run Pre-Parsing Logic ---
             file_content_for_search = extract_full_content_for_search(filepath, ext)
             if isinstance(file_content_for_search, list):
                 search_content = ' '.join(file_content_for_search)
@@ -48,7 +49,7 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
             else:
                 content_source = filepath
 
-            # 3. Call parse_transactions (unchanged)
+            # 3. Call parse_transactions
             df_transactions = parse_transactions(
                 content_source,
                 ext,
@@ -58,7 +59,6 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
             )
             df_universal = normalize_transactions(df_transactions, bank_name, filename)
 
-            # This check is now for *all* transactions, not just incoming
             if df_universal.empty:
                 return 0, f"File {filename}: No transactions (in or out) found after parsing."
 
@@ -77,12 +77,16 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
                         statement=statement,
                         transaction_date=row['Transaction_Date'],
                         provision_date=row['Provision_Date'],
+                        # --- NEW: Save date_from_description ---
+                        # Handle NaT (Not a Time) from pandas, which becomes None in DB
+                        date_from_description=row['date_from_description'] if pd.notna(row['date_from_description']) else None,
+                        # --- END NEW ---
                         amount=row['Amount'],
                         currency=row['Currency'],
                         description=row['Description'],
                         sender=row['Sender'],
                         sender_account=row['Sender account number'],
-                        is_expense=row['is_expense'] # <-- NEW FIELD
+                        is_expense=row['is_expense']
                     )
                 )
 
@@ -97,7 +101,7 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
         return 0, f"Import failed due to internal error: {e}"
 
     finally:
-        # --- 5. Clean up (unchanged) ---
+        # --- 5. Clean up ---
         if default_storage.exists(temp_path):
              try:
                  default_storage.delete(temp_path)
