@@ -1,11 +1,14 @@
 {% load static %}
+{% load i18n %} {# NEW: Load i18n #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
+
+    <link href="{% static 'tax_processor/select2/select2.min.css' %}" rel="stylesheet" />
+
     <style>
-        /* General Layout */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f4f7f6;
@@ -22,7 +25,7 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
         h1 {
-            color: #dc3545; /* Red/Alert color for action requiring confirmation */
+            color: #dc3545;
             font-size: 2em;
             border-bottom: 2px solid #ccc;
             padding-bottom: 10px;
@@ -36,8 +39,6 @@
             border-bottom: 1px solid #eee;
             padding-bottom: 5px;
         }
-
-        /* --- Transaction Detail Box --- */
         .detail-box {
             border: 1px solid #dee2e6;
             padding: 15px;
@@ -47,12 +48,9 @@
         }
         .detail-box p { margin: 5px 0; font-size: 0.95em; }
         .detail-box strong { color: #343a40; }
-        .detail-box em { color: #dc3545; font-style: normal; font-weight: bold; }
-        /* --- END Detail Box --- */
-
-        /* Proposal Detail Box */
+        .detail-box em { color: #007bff; font-style: normal; font-weight: bold; }
         .proposal-detail-box {
-            border: 1px solid #ffc107; /* Yellow for review status */
+            border: 1px solid #ffc107;
             padding: 15px;
             margin-bottom: 30px;
             border-radius: 6px;
@@ -60,8 +58,6 @@
         }
         .proposal-detail-box p { margin: 5px 0; font-size: 0.95em; }
         .proposal-detail-box strong { color: #856404; }
-
-        /* Form Layout */
         .field-group { margin-bottom: 25px; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px; }
         label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
         input[type="text"], input[type="number"], select {
@@ -69,12 +65,10 @@
             padding: 10px;
             border: 1px solid #ced4da;
             border-radius: 4px;
-            box-sizing: border-box; /* Important for 100% width */
+            box-sizing: border-box;
         }
         small { display: block; color: #6c757d; margin-top: 5px; }
-        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; }
-
-        /* Dynamic Formset Styling */
+        .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
         .conditions-section {
             margin-top: 30px;
             padding: 20px;
@@ -83,7 +77,6 @@
             border-radius: 4px;
         }
         .conditions-section h2 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; }
-
         .condition-form-row {
             display: grid;
             grid-template-columns: 1fr 1fr 2fr auto;
@@ -100,7 +93,14 @@
             margin-bottom: 3px;
         }
 
-        /* Button Styling */
+        /* NEW: Wrapper for value inputs */
+        .condition-value-container { display: flex; flex-direction: column; }
+        .condition-value-container .form-control {
+            width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
+        }
+        .condition-value-container label { display: none; }
+        .condition-value-container > div:first-child label { display: block; }
+
         .btn {
             padding: 10px 15px;
             border: none;
@@ -118,16 +118,13 @@
             font-size: 1.1em;
         }
         .approve-btn:hover { background-color: #1e7e34; }
-
-        /* --- UPDATED BUTTON STYLES --- */
         .reject-btn {
-            padding: 10px 15px; /* Made slightly smaller than approve */
-            background-color: #dc3545; /* Red */
+            padding: 10px 15px;
+            background-color: #dc3545;
             color: white;
             font-size: 1.0em;
         }
         .reject-btn:hover { background-color: #c82333; }
-
         .cancel-link {
             color: #6c757d;
             margin-left: 15px;
@@ -142,22 +139,24 @@
             display: flex;
             align-items: center;
         }
-        /* --- END UPDATED STYLES --- */
-
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
+        .select2-container { width: 100% !important; box-sizing: border-box; }
     </style>
 </head>
 <body>
 <div class="container">
     {% include "tax_processor/base_navigation.html" %}
+
     <h1>{{ title }}</h1>
     <p>Խնդրում ենք վերանայել օգտատիրոջ կողմից առաջարկված կանոնը և հաստատել նախքան մշտական պահպանելը։</p>
 
     <h2>Գործարքի Մանրամասները</h2>
     <div class="detail-box">
         <p><strong>Ամսաթիվ:</strong> {{ transaction.transaction_date|date:"Y-m-d H:i" }}</p>
-        <p><strong>Գումար:</strong> <em style="color: #007bff;">{{ transaction.amount }} {{ transaction.currency }}</em></p>
+        <p><strong>Գումար:</strong> <em {% if transaction.is_expense %}style="color: #dc3545;"{% else %}style="color: #28a745;"{% endif %}>
+            {% if transaction.is_expense %}-{% endif %}{{ transaction.amount }} {{ transaction.currency }}
+        </em></p>
         <p><strong>Ուղարկող:</strong> {{ transaction.sender }} (Հաշիվ: {{ transaction.sender_account|default:"N/A" }})</p>
         <p><strong>Նկարագրություն:</strong> <em>{{ transaction.description }}</em></p>
         <p><small>Պատկանում է Հայտարարագրին: {{ transaction.statement.declaration.name }}</small></p>
@@ -208,28 +207,37 @@
                 {% for form in formset %}
                 <div class="condition-form-row">
                     {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                    <div>
+                        {{ form.field.label_tag }} {{ form.field }}
+                        {% for error in form.field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        {{ form.condition_type.label_tag }} {{ form.condition_type }}
+                        {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                    </div>
 
-                    <div>
-                        {{ form.field.label_tag }}
-                        {{ form.field }}
-                        {% for error in form.field.errors %}
-                        <p class="errorlist">{{ error }}</p>
-                        {% endfor %}
+                    <div class="condition-value-container">
+                        <div class="condition-value-input-wrapper">
+                            {{ form.value.label_tag }} {{ form.value }}
+                            {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                        </div>
+                        <div class="condition-value-select-wrapper" style="display: none;">
+                            <label for="id_{{ form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <select name="{{ form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ form.prefix }}-value_select_bank">
+                                <option value="">---------</option>
+                                {% for bank_name in bank_names %}
+                                <option value="{{ bank_name }}" {% if form.value.value == bank_name %}selected{% endif %}>
+                                    {{ bank_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="condition-value-field-wrapper" style="display: none;">
+                            {{ form.value_field.label_tag }} {{ form.value_field }}
+                            {% for error in form.value_field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                        </div>
                     </div>
-                    <div>
-                        {{ form.condition_type.label_tag }}
-                        {{ form.condition_type }}
-                        {% for error in form.condition_type.errors %}
-                        <p class="errorlist">{{ error }}</p>
-                        {% endfor %}
-                    </div>
-                    <div>
-                        {{ form.value.label_tag }}
-                        {{ form.value }}
-                        {% for error in form.value.errors %}
-                        <p class="errorlist">{{ error }}</p>
-                        {% endfor %}
-                    </div>
+
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ form.DELETE }}</div>
@@ -243,18 +251,25 @@
             <div id="empty-form-template" style="display: none;">
                 <div class="condition-form-row">
                     {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-                    <div>
-                        {{ formset.empty_form.field.label_tag }}
-                        {{ formset.empty_form.field }}
+                    <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
+                    <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>
+
+                    <div class="condition-value-container">
+                        <div class="condition-value-input-wrapper">
+                            {{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}
+                        </div>
+                        <div class="condition-value-select-wrapper" style="display: none;">
+                            <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <select name="{{ formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ formset.empty_form.prefix }}-value_select_bank">
+                                <option value="">---------</option>
+                                {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
+                            </select>
+                        </div>
+                        <div class="condition-value-field-wrapper" style="display: none;">
+                            {{ formset.empty_form.value_field.label_tag }} {{ formset.empty_form.value_field }}
+                        </div>
                     </div>
-                    <div>
-                        {{ formset.empty_form.condition_type.label_tag }}
-                        {{ formset.empty_form.condition_type }}
-                    </div>
-                    <div>
-                        {{ formset.empty_form.value.label_tag }}
-                        {{ formset.empty_form.value }}
-                    </div>
+
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
@@ -263,7 +278,6 @@
                     </div>
                 </div>
             </div>
-
             <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button>
         </div>
 
@@ -286,8 +300,11 @@
     </div>
     <p style="margin-top: 40px; color: #6c757d; font-size: 0.9em;">
         Հաստատելուց հետո այս գործարքը կմաքրվի վերանայման հերթից, իսկ կանոնը կսկսի ավտոմատ կիրառվել։
-        </sCRIPT>
+    </p>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="{% static 'tax_processor/select2/select2.min.js' %}"></script>
 
 
 <script>
@@ -302,51 +319,132 @@
                 }
             });
         }
-        // --- END REJECT SCRIPT ---
 
+        // --- Configuration ---
+        const DYNAMIC_CONDITION_TYPES = [
+            'CONTAINS_FIELD_VALUE',
+            'NOT_CONTAINS_FIELD_VALUE',
+            'EQUALS_FIELD_VALUE'
+        ];
+        const BANK_FIELD_VALUE = 'statement__bank_name';
 
-        // --- SCRIPT FOR DYNAMIC FORMSET ---
+        /**
+         * Main function to toggle the visibility of the three value widgets
+         * based on the selected Field and Condition Type.
+         */
+        function updateValueWidgets(elementInRow) {
+            const row = elementInRow.closest('.condition-form-row');
+            if (!row) return;
+
+            // Find all elements in the row
+            const conditionTypeSelect = row.querySelector('.condition-type');
+            const fieldSelect = row.querySelector('.condition-field');
+
+            const valueTextWrapper = row.querySelector('.condition-value-input-wrapper');
+            const valueBankWrapper = row.querySelector('.condition-value-select-wrapper');
+            const valueFieldWrapper = row.querySelector('.condition-value-field-wrapper');
+
+            if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper) {
+                console.error("Could not find all required elements in formset row.", row);
+                return;
+            }
+
+            // Get current selected values
+            const conditionType = conditionTypeSelect.value;
+            const fieldType = fieldSelect.value;
+
+            // --- Logic to show/hide widgets ---
+            const isDynamic = DYNAMIC_CONDITION_TYPES.includes(conditionType);
+            const isBankField = (fieldType === BANK_FIELD_VALUE);
+
+            valueFieldWrapper.style.display = isDynamic ? 'block' : 'none';
+            valueBankWrapper.style.display = (!isDynamic && isBankField) ? 'block' : 'none';
+            valueTextWrapper.style.display = (!isDynamic && !isBankField) ? 'block' : 'none';
+
+            // --- Logic to swap 'name' attribute ---
+            const valueTextInput = valueTextWrapper.querySelector('input');
+            const valueBankSelect = valueBankWrapper.querySelector('select');
+            const valueFieldSelect = valueFieldWrapper.querySelector('select');
+
+            if (!valueTextInput || !valueBankSelect || !valueFieldSelect) return;
+
+            if (!valueTextInput.dataset.originalName) valueTextInput.dataset.originalName = valueTextInput.name;
+            if (!valueBankSelect.dataset.originalName) valueBankSelect.dataset.originalName = valueBankSelect.name;
+            if (!valueFieldSelect.dataset.originalName) valueFieldSelect.dataset.originalName = valueFieldSelect.name;
+
+            if (isDynamic) {
+                valueFieldSelect.name = valueFieldSelect.dataset.originalName;
+                valueTextInput.name = '';
+                valueBankSelect.name = '';
+            } else if (isBankField) {
+                valueBankSelect.name = valueBankSelect.dataset.originalName;
+                valueTextInput.name = '';
+                valueFieldSelect.name = '';
+            } else { // Is static text input
+                valueTextInput.name = valueTextInput.dataset.originalName;
+                valueBankSelect.name = '';
+                valueFieldSelect.name = '';
+            }
+        }
+
+        // --- Formset (Add/Remove) Logic ---
         const formList = document.getElementById('condition-form-list');
         const addBtn = document.getElementById('add-condition-btn');
-        const emptyFormTemplate = document.getElementById('empty-form-template').innerHTML;
+        const emptyFormTemplateDiv = document.getElementById('empty-form-template');
+        const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
         const totalFormsInput = document.querySelector('input[name="conditions-TOTAL_FORMS"]');
-        const formPrefix = 'conditions'; // Must match the prefix in the view
+        const formPrefix = 'conditions';
 
-        addBtn.addEventListener('click', function() {
-            // Get the current number of forms
-            let currentFormCount = parseInt(totalFormsInput.value, 10);
+        function initializeRow(row) {
+            const fieldSelect = row.querySelector('.condition-field');
+            const conditionTypeSelect = row.querySelector('.condition-type');
 
-            // Create new form HTML, replacing the prefix placeholder
-            let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
+            if (fieldSelect) {
+                fieldSelect.addEventListener('change', () => updateValueWidgets(fieldSelect));
+            }
+            if (conditionTypeSelect) {
+                conditionTypeSelect.addEventListener('change', () => updateValueWidgets(conditionTypeSelect));
+            }
+            updateValueWidgets(fieldSelect || conditionTypeSelect);
+        }
 
-            // Append to the list
-            let tempDiv = document.createElement('div');
-            tempDiv.innerHTML = newFormHtml;
-            formList.appendChild(tempDiv.firstElementChild);
+        // Initialize all existing forms
+        formList.querySelectorAll('.condition-form-row').forEach(initializeRow);
 
-            // Increment the total forms count
-            totalFormsInput.value = currentFormCount + 1;
-        });
+        // Handle adding new forms
+        if (addBtn && emptyFormTemplate && totalFormsInput) {
+            addBtn.addEventListener('click', function() {
+                let currentFormCount = parseInt(totalFormsInput.value, 10);
+                let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
+                let tempDiv = document.createElement('div');
+                tempDiv.innerHTML = newFormHtml;
+                const newRow = tempDiv.firstElementChild;
 
-        // Event delegation for remove buttons
+                if (newRow) {
+                    formList.appendChild(newRow);
+                    totalFormsInput.value = currentFormCount + 1;
+                    initializeRow(newRow);
+                }
+            });
+        }
+
+        // Handle removing forms
         formList.addEventListener('click', function(e) {
             if (e.target && e.target.classList.contains('btn-remove')) {
-                // Find the parent row
                 let row = e.target.closest('.condition-form-row');
-
-                // Find the DELETE checkbox within this row and check it
                 let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
-                if (deleteCheckbox) {
-                    deleteCheckbox.checked = true;
-                }
-
-                // Hide the row
+                if (deleteCheckbox) { deleteCheckbox.checked = true; }
                 row.style.display = 'none';
             }
         });
-        // --- END FORMSET SCRIPT ---
+
+        // --- Select2 Initialization ---
+        $('#{{ form.declaration_point.id_for_label }}').select2({
+            placeholder: "Ընտրեք կատեգորիա",
+            allowClear: true
+        });
+
     });
 </script>
-
 </body>
 </html>

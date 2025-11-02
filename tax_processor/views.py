@@ -820,15 +820,40 @@ def finalize_rule(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id); transaction = unmatched_item.transaction
     if unmatched_item.status != 'NEW_RULE_PROPOSED': messages.error(request, "Not a pending proposal."); return redirect('review_proposals')
     proposal_data = unmatched_item.rule_proposal_json; proposed_category_name = proposal_data.get('resolved_point_name', 'N/A')
+
+    formset_prefix = 'conditions' # This matches the template JavaScript
+
     if request.method == 'POST':
-        form = TaxRuleForm(request.POST, instance=None); formset = BaseConditionFormSet(request.POST, prefix='conditions')
+        form = TaxRuleForm(request.POST, instance=None)
+        formset = BaseConditionFormSet(request.POST, prefix=formset_prefix)
+
         if form.is_valid() and formset.is_valid():
             with db_transaction.atomic():
                 new_rule = form.save(commit=False); new_rule.created_by = request.user; new_rule.declaration = None
                 checks = [];
+
+                # --- NEW: Logic to save dynamic field value ---
                 for check_form in formset.cleaned_data:
-                     if check_form and not check_form.get('DELETE'): checks.append({'field': check_form['field'], 'type': check_form['condition_type'], 'value': check_form['value']})
+                    if check_form and not check_form.get('DELETE'):
+                        condition_type = check_form['condition_type']
+                        value_to_save = None
+
+                        # Check if this condition type uses the dynamic field
+                        if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                            value_to_save = check_form.get('value_field')
+                        else:
+                            # Otherwise, use the standard text 'value'
+                            value_to_save = check_form.get('value')
+
+                        checks.append({
+                            'field': check_form['field'],
+                            'type': condition_type,
+                            'value': value_to_save # Save the correct value
+                        })
+                # --- END NEW ---
+
                 new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+
                 try:
                     new_rule.save()
                     unmatched_item.status = 'RESOLVED'; unmatched_item.save()
@@ -836,27 +861,30 @@ def finalize_rule(request, unmatched_id):
                     return redirect('review_proposals')
                 except IntegrityError:
                      messages.error(request, f"Cannot save rule '{new_rule.rule_name}'. A global rule with this name already exists.")
-                     context = {
-                         'form': form, 'formset': formset, 'unmatched_item': unmatched_item, 'transaction': transaction,
-                         'title': f"Finalize Rule Proposal #{unmatched_id}", 'proposal_notes': proposal_data.get('notes'),
-                         'proposed_category_name': proposed_category_name, 'is_admin': True
-                    }
-                     return render(request, 'tax_processor/finalize_rule.html', context)
-        else:
-             context = {
-                 'form': form, 'formset': formset, 'unmatched_item': unmatched_item, 'transaction': transaction,
-                 'title': f"Finalize Rule Proposal #{unmatched_id}", 'proposal_notes': proposal_data.get('notes'),
-                 'proposed_category_name': proposed_category_name, 'is_admin': True
-            }
-             return render(request, 'tax_processor/finalize_rule.html', context)
+                     # Fall through to re-render context
+
+        # --- Form or formset was invalid ---
+        context = {
+            'form': form, 'formset': formset, 'unmatched_item': unmatched_item,
+            'transaction': transaction, 'title': f"Finalize Rule Proposal #{unmatched_id}",
+            'proposal_notes': proposal_data.get('notes'),
+            'proposed_category_name': proposed_category_name, 'is_admin': True,
+            'bank_names': BANK_NAMES_LIST # <-- ADDED
+        }
+        return render(request, 'tax_processor/finalize_rule.html', context)
+
     else: # GET
         initial_form_data = {'rule_name': f"AUTO_RULE: {unmatched_item.pk} - {proposed_category_name}", 'declaration_point': proposal_data.get('resolved_point_id'), 'priority': 50, 'is_active': True, 'logic': 'AND'}
         initial_formset_data = [{'field': 'description', 'condition_type': 'CONTAINS_KEYWORD', 'value': proposal_data.get('sample_description', '')}]
-        form = TaxRuleForm(initial=initial_form_data); formset = BaseConditionFormSet(initial=initial_formset_data, prefix='conditions')
+        form = TaxRuleForm(initial=initial_form_data)
+        formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
+
         context = {
-            'form': form, 'formset': formset, 'unmatched_item': unmatched_item, 'transaction': transaction,
-            'title': f"Finalize Rule Proposal #{unmatched_id}", 'proposal_notes': proposal_data.get('notes'),
-            'proposed_category_name': proposed_category_name, 'is_admin': True
+            'form': form, 'formset': formset, 'unmatched_item': unmatched_item,
+            'transaction': transaction, 'title': f"Finalize Rule Proposal #{unmatched_id}",
+            'proposal_notes': proposal_data.get('notes'),
+            'proposed_category_name': proposed_category_name, 'is_admin': True,
+            'bank_names': BANK_NAMES_LIST # <-- ADDED
         }
         return render(request, 'tax_processor/finalize_rule.html', context)
 
