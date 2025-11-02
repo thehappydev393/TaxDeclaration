@@ -37,7 +37,7 @@
         .footer-nav { margin-top: 20px; }
         .description-cell { max-width: 400px; word-wrap: break-word; }
 
-        /* --- NEW: Hint Box Styles --- */
+        /* --- Hint Box Styles --- */
         .hint-section {
             margin-bottom: 25px;
             padding: 15px;
@@ -63,10 +63,19 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 15px; /* Add gap */
         }
+        .hint-box-content { flex-grow: 1; } /* Allow content to grow */
         .hint-box-content p { margin: 2px 0; }
         .hint-box-content .hint-title { font-weight: bold; color: #333; }
         .hint-box-content .hint-description { font-size: 0.9em; color: #555; }
+
+        /* MODIFIED: Action group for buttons */
+        .hint-box-action {
+            display: flex;
+            align-items: center;
+            gap: 10px; /* Space between buttons */
+        }
         .hint-box-action .btn-view {
             padding: 5px 10px;
             background-color: #007bff;
@@ -78,7 +87,21 @@
             white-space: nowrap;
         }
         .hint-box-action .btn-view:hover { background-color: #0056b3; }
-        /* --- END NEW --- */
+
+        /* NEW: Dismiss button style */
+        .hint-box-action .btn-dismiss {
+            padding: 4px 8px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .hint-box-action .btn-dismiss:hover { background-color: #5a6268; }
+        .hint-box-action form { margin: 0; }
+        /* --- END NEW/MODIFIED --- */
 
         /* Pagination */
         .pagination { margin-top: 25px; text-align: center; }
@@ -118,6 +141,10 @@
                 <a href="{% url 'all_transactions_list' declaration_id=current_declaration.id %}?tx_ids={{ hint.related_transaction_ids|join:',' }}" target="_blank" class="btn-view">
                     Դիտել Գործարքները
                 </a>
+                <form action="{% url 'dismiss_hint' hint.id %}" method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-dismiss" title="Dismiss this hint">X</button>
+                </form>
             </div>
         </div>
         {% endfor %}

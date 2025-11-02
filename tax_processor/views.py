@@ -15,11 +15,11 @@ from .services import import_statement_service
 from .rules_engine import RulesEngine
 from .entity_type_rules_engine import EntityTypeRulesEngine
 from .transaction_scope_rules_engine import TransactionScopeRulesEngine
-from .analysis_hints import generate_analysis_hints # <-- NEW: Import hint generator
+from .analysis_hints import generate_analysis_hints
 from .models import (
     Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile, DeclarationPoint,
     EntityTypeRule, TransactionScopeRule, ExchangeRate,
-    AnalysisHint # <-- NEW: Import AnalysisHint model
+    AnalysisHint
 )
 from .parser_logic import BANK_KEYWORDS
 from datetime import date
@@ -46,7 +46,6 @@ def is_permitted_user(user):
 # -----------------------------------------------------------
 # 2. DATA INGESTION & DECLARATION MGMT
 # -----------------------------------------------------------
-# ... (upload_statement, add_statements_to_declaration, filter_declarations_by_user, declaration_detail... no changes) ...
 @user_passes_test(is_permitted_user)
 def upload_statement(request):
     if request.method == 'POST':
@@ -176,12 +175,10 @@ def run_declaration_analysis(request, declaration_id):
         messages.info(request, f"Matched {matched} new/re-evaluated categories. Cleared {cleared_unmatched} existing review items.")
         messages.info(request, f"Found {new_unmatched} new transactions requiring manual review.")
 
-        # --- NEW: Generate Hints ---
         if new_unmatched > 0 or cleared_unmatched > 0 or matched > 0:
             messages.info(request, "Running pattern analysis for hints...")
             hint_count = generate_analysis_hints(declaration.pk)
             messages.success(request, f"Generated {hint_count} new analysis hints.")
-        # --- END NEW ---
 
     except Exception as e:
         messages.error(request, f"A critical error occurred during analysis: {e}")
@@ -216,12 +213,10 @@ def run_analysis_pending(request, declaration_id):
             messages.info(request, f"Մաքրվել է {cleared_unmatched} գործարք 'Սպասում է Վերանայման' հերթից։")
         messages.info(request, f"Հայտնաբերվել է {new_unmatched} նոր գործարք, որոնք պահանջում են ձեռքով վերանայում։")
 
-        # --- NEW: Generate Hints ---
         if new_unmatched > 0 or cleared_unmatched > 0:
             messages.info(request, "Running pattern analysis for hints...")
             hint_count = generate_analysis_hints(declaration.pk)
             messages.success(request, f"Generated {hint_count} new analysis hints.")
-        # --- END NEW ---
 
     except Exception as e:
         messages.error(request, f"A critical error occurred during pending analysis: {e}")
@@ -231,7 +226,6 @@ def run_analysis_pending(request, declaration_id):
 # -----------------------------------------------------------
 # 3. GLOBAL (CATEGORY) RULE MANAGEMENT
 # -----------------------------------------------------------
-# ... (rule_list_global, rule_create_or_update, rule_delete... no changes) ...
 @user_passes_test(is_superadmin)
 def rule_list_global(request):
     queryset = TaxRule.objects.filter(declaration__isnull=True).select_related('declaration_point', 'created_by')
@@ -267,7 +261,6 @@ def rule_list_global(request):
         'filter_proposal': filter_proposal, 'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
     return render(request, 'tax_processor/rule_list.html', context)
-
 
 @user_passes_test(is_superadmin)
 def rule_create_or_update(request, rule_id=None, declaration_id=None):
@@ -404,7 +397,6 @@ def rule_delete(request, rule_id, declaration_id=None):
 # -----------------------------------------------------------
 # 4. DECLARATION-SPECIFIC (CATEGORY) RULE LIST VIEW
 # -----------------------------------------------------------
-# ... (declaration_rule_list... no changes) ...
 @user_passes_test(is_permitted_user)
 def declaration_rule_list(request, declaration_id):
     declaration = get_object_or_404(Declaration, pk=declaration_id)
@@ -447,10 +439,10 @@ def declaration_rule_list(request, declaration_id):
     }
     return render(request, 'tax_processor/rule_list.html', context)
 
+
 # -----------------------------------------------------------
 # 5. GLOBAL RULE PROPOSAL WORKFLOW
 # -----------------------------------------------------------
-# ... (propose_rule_global, review_global_proposals, approve_global_proposal, reject_global_proposal... no changes) ...
 @user_passes_test(is_permitted_user)
 @require_POST
 def propose_rule_global(request, rule_id):
@@ -503,10 +495,10 @@ def reject_global_proposal(request, rule_id):
     messages.warning(request, f"Proposal for rule '{rule.rule_name}' rejected. It remains a specific rule for Declaration {rule.declaration_id}.")
     return redirect('review_global_proposals')
 
+
 # -----------------------------------------------------------
 # 6. USER DASHBOARD & REVIEW QUEUES
 # -----------------------------------------------------------
-# ... (user_dashboard... no changes) ...
 @user_passes_test(is_permitted_user)
 def user_dashboard(request):
     user = request.user
@@ -558,7 +550,7 @@ def review_queue(request, declaration_id=None):
     is_filtered_by_declaration = False
     title = ""
     current_declaration = None
-    hints = [] # <-- NEW: Initialize empty hints list
+    hints = []
     if declaration_id:
         current_declaration = get_object_or_404(Declaration, pk=declaration_id)
         if not (is_superadmin(user) or current_declaration.created_by == user):
@@ -566,9 +558,7 @@ def review_queue(request, declaration_id=None):
         queryset = queryset.filter(transaction__statement__declaration_id=declaration_id)
         title = f"Review Queue - {current_declaration.name}"
         is_filtered_by_declaration = True
-        # --- NEW: Fetch Hints ---
         hints = AnalysisHint.objects.filter(declaration=current_declaration, is_resolved=False)
-        # --- END NEW ---
     elif is_superadmin(user):
         title = "SUPERADMIN Review Queue (All Pending)"
     else:
@@ -604,15 +594,13 @@ def review_queue(request, declaration_id=None):
     if 'page' in get_params:
         del get_params['page']
 
-    # --- MODIFIED: Add 'hints' to context ---
     context = {
         'title': title, 'unmatched_items': page_obj, 'page_obj': page_obj,
         'is_admin': is_superadmin(user), 'is_filtered': is_filtered_by_declaration,
         'current_declaration': current_declaration, 'search_query': search_query,
         'filter_user': filter_user, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'hints': hints # <-- NEW
+        'hints': hints
     }
-    # --- END MODIFIED ---
 
     if is_superadmin(user) and not declaration_id:
         context['all_users'] = User.objects.filter(assigned_reviews__status='PENDING_REVIEW').distinct()
@@ -621,7 +609,6 @@ def review_queue(request, declaration_id=None):
 
 @user_passes_test(is_permitted_user)
 def resolve_transaction(request, unmatched_id):
-    # ... (this view is unchanged) ...
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
     tx = unmatched_item.transaction
     declaration = tx.statement.declaration
@@ -753,7 +740,6 @@ def resolve_transaction(request, unmatched_id):
 # -----------------------------------------------------------
 # 7. TAX REPORT & PROPOSALS
 # -----------------------------------------------------------
-# ... (tax_report, review_proposals, finalize_rule, reject_proposal... no changes) ...
 @user_passes_test(is_permitted_user)
 def tax_report(request, declaration_id):
     declaration_qs = filter_declarations_by_user(request.user)
@@ -959,17 +945,14 @@ def all_transactions_list(request, declaration_id):
         'declaration_point', 'matched_rule', 'unmatched_record'
     )
 
-    # --- NEW: Filter by specific IDs if provided ---
     transaction_ids_str = request.GET.get('tx_ids', '')
     if transaction_ids_str:
         try:
-            # Split string by comma, convert to int, and filter
             tx_ids_list = [int(id_str) for id_str in transaction_ids_str.split(',')]
             queryset = queryset.filter(id__in=tx_ids_list)
             messages.info(request, f"Ցուցադրվում են {len(tx_ids_list)} հատուկ գործարքներ՝ ըստ վերլուծության ակնարկի։")
         except (ValueError, TypeError):
             messages.error(request, "Invalid transaction ID list in URL.")
-    # --- END NEW ---
 
     search_query = request.GET.get('q', '').strip()
     if search_query:
@@ -1022,7 +1005,6 @@ def all_transactions_list(request, declaration_id):
 
 @user_passes_test(is_permitted_user)
 def edit_transaction(request, transaction_id):
-    # ... (this view is unchanged) ...
     transaction_obj = get_object_or_404(Transaction.objects.select_related(
         'statement__declaration', 'declaration_point', 'matched_rule', 'unmatched_record'
     ), pk=transaction_id)
@@ -1081,7 +1063,6 @@ def edit_transaction(request, transaction_id):
 # -----------------------------------------------------------
 # 9. EntityTypeRule Views
 # -----------------------------------------------------------
-# ... (entity_rule_list, entity_rule_create_or_update, entity_rule_delete... no changes) ...
 @user_passes_test(is_superadmin)
 def entity_rule_list(request, declaration_id=None):
     is_specific = declaration_id is not None
@@ -1251,7 +1232,6 @@ def entity_rule_delete(request, rule_id, declaration_id=None):
 # -----------------------------------------------------------
 # 10. TransactionScopeRule Views
 # -----------------------------------------------------------
-# ... (scope_rule_list, scope_rule_create_or_update, scope_rule_delete... no changes) ...
 @user_passes_test(is_superadmin)
 def scope_rule_list(request, declaration_id=None):
     is_specific = declaration_id is not None
@@ -1414,3 +1394,24 @@ def scope_rule_delete(request, rule_id, declaration_id=None):
     rule.delete()
     messages.success(request, f"Scope Rule '{rule_name}' successfully deleted.")
     return redirect(list_url_name, **url_kwargs)
+
+# --- NEW: Hint Dismissal View ---
+@user_passes_test(is_permitted_user)
+@require_POST
+def dismiss_hint(request, hint_id):
+    # Get the hint and ensure the user has permission to dismiss it
+    hint_query = Q(pk=hint_id)
+    if not is_superadmin(request.user):
+        hint_query &= Q(declaration__created_by=request.user)
+
+    hint = get_object_or_404(AnalysisHint, hint_query)
+
+    # Mark as resolved and save
+    hint.is_resolved = True
+    hint.save()
+
+    messages.info(request, f"Hint '{hint.title}' dismissed.")
+
+    # Redirect back to the review queue for that declaration
+    return redirect('review_queue_declaration', declaration_id=hint.declaration.id)
+# --- END NEW ---

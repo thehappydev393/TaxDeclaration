@@ -21,6 +21,10 @@ urlpatterns = [
     path('review/declaration/<int:declaration_id>/', views.review_queue, name='review_queue_declaration'),
     path('review/resolve/<int:unmatched_id>/', views.resolve_transaction, name='resolve_transaction'),
 
+    # --- NEW: Hint Dismissal URL ---
+    path('hints/dismiss/<int:hint_id>/', views.dismiss_hint, name='dismiss_hint'),
+    # --- END NEW ---
+
     # 4. Global Rule Management (Superadmin Only) - Main Category
     path('rules/global/', views.rule_list_global, name='rule_list_global'),
     path('rules/global/create/', views.rule_create_or_update, name='rule_create_global'),
@@ -44,25 +48,25 @@ urlpatterns = [
     path('rules/proposals/finalize/<int:unmatched_id>/', views.finalize_rule, name='finalize_rule'),
     path('rules/proposals/reject_manual/<int:unmatched_id>/', views.reject_proposal, name='reject_proposal'),
 
-    # --- NEW: Entity Type Rule Management (Global) ---
+    # --- Entity Type Rule Management (Global) ---
     path('rules/entity/global/', views.entity_rule_list, name='entity_rule_list_global'),
     path('rules/entity/global/create/', views.entity_rule_create_or_update, name='entity_rule_create_global'),
     path('rules/entity/global/update/<int:rule_id>/', views.entity_rule_create_or_update, name='entity_rule_update_global'),
     path('rules/entity/global/delete/<int:rule_id>/', views.entity_rule_delete, name='entity_rule_delete_global'),
 
-    # --- NEW: Entity Type Rule Management (Specific) ---
+    # --- Entity Type Rule Management (Specific) ---
     path('declaration/<int:declaration_id>/rules/entity/', views.entity_rule_list, name='entity_rule_list_specific'),
     path('declaration/<int:declaration_id>/rules/entity/create/', views.entity_rule_create_or_update, name='entity_rule_create_specific'),
     path('declaration/<int:declaration_id>/rules/entity/update/<int:rule_id>/', views.entity_rule_create_or_update, name='entity_rule_update_specific'),
     path('declaration/<int:declaration_id>/rules/entity/delete/<int:rule_id>/', views.entity_rule_delete, name='entity_rule_delete_specific'),
 
-    # --- NEW: Transaction Scope Rule Management (Global) ---
+    # --- Transaction Scope Rule Management (Global) ---
     path('rules/scope/global/', views.scope_rule_list, name='scope_rule_list_global'),
     path('rules/scope/global/create/', views.scope_rule_create_or_update, name='scope_rule_create_global'),
     path('rules/scope/global/update/<int:rule_id>/', views.scope_rule_create_or_update, name='scope_rule_update_global'),
     path('rules/scope/global/delete/<int:rule_id>/', views.scope_rule_delete, name='scope_rule_delete_global'),
 
-    # --- NEW: Transaction Scope Rule Management (Specific) ---
+    # --- Transaction Scope Rule Management (Specific) ---
     path('declaration/<int:declaration_id>/rules/scope/', views.scope_rule_list, name='scope_rule_list_specific'),
     path('declaration/<int:declaration_id>/rules/scope/create/', views.scope_rule_create_or_update, name='scope_rule_create_specific'),
     path('declaration/<int:declaration_id>/rules/scope/update/<int:rule_id>/', views.scope_rule_create_or_update, name='scope_rule_update_specific'),
