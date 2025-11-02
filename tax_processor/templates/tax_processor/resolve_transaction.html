@@ -1,85 +1,64 @@
 {% load static %}
+{% load i18n %} {# NEW: Load i18n for template tags #}
 <!DOCTYPE html>
 <html lang="hy">
 <head>
     <meta charset="UTF-8">
-    <title>Լուծել Գործարքը</title> {# Resolve Transaction #}
+    <title>Լուծել Գործարքը</title>
 
     <link href="{% static 'tax_processor/select2/select2.min.css' %}" rel="stylesheet" />
 
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
-        .container { max-width: 1400px; /* Increased width */ margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         h1, h2, h3 { color: #007bff; margin-top: 0; }
         h1 { font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-bottom: 25px; }
         h2 { font-size: 1.4em; color: #495057; margin-top: 25px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         h3 { font-size: 1.2em; color: #343a40; margin-top: 20px; }
-
-        /* Transaction Detail Box */
         .detail-box { border: 1px solid #dee2e6; padding: 15px; margin-bottom: 30px; border-radius: 4px; background-color: #f8f9fa; }
         .detail-box p { margin: 5px 0; font-size: 0.95em; }
         .detail-box strong { color: #343a40; }
-        .detail-box em { color: #dc3545; font-style: normal; font-weight: bold; }
-
-        /* Form Styling */
+        .detail-box em { color: #007bff; font-style: normal; font-weight: bold; }
         form p, form div.form-field { margin-bottom: 20px; }
         label { display: block; font-weight: 600; margin-bottom: 8px; color: #495057; }
         select, textarea, input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; transition: border-color 0.2s; }
         textarea { resize: vertical; }
         .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
         small { display: block; color: #6c757d; margin-top: 5px; }
-
-        /* Radio Select Styling */
         .radio-select label { display: inline-block; margin-right: 15px; margin-left: 5px; font-weight: normal; }
         .radio-select input[type="radio"] { margin-right: 5px; }
-
-        /* Conditional Sections Styling */
-        #rule-creation-form-section, #proposal-notes-section {
-            display: none; /* Hidden by default */
-            border-top: 1px dashed #ccc;
-            margin-top: 25px;
-            padding-top: 20px;
-        }
-
-        /* --- Rule Form Specific Styles (copied from rule_form.html) --- */
-        .field-group { margin-bottom: 25px; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px; background-color: #fdfdfd; } /* Slightly different background */
+        #rule-creation-form-section, #proposal-notes-section { display: none; border-top: 1px dashed #ccc; margin-top: 25px; padding-top: 20px; }
+        .field-group { margin-bottom: 25px; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px; background-color: #fdfdfd; }
         .conditions-section { margin-top: 30px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; }
-        .conditions-section h3 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; } /* Use h3 here */
+        .conditions-section h3 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; }
         .condition-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; align-items: flex-start; }
         .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
 
-        /* Value Input/Select Styling */
-        .form-control { /* Common style for inputs/selects in formset */
+        /* NEW: Wrapper for value inputs */
+        .condition-value-container { display: flex; flex-direction: column; }
+        .condition-value-container .form-control {
             width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
         }
 
         .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; text-align: center; }
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
-        /* --- End Rule Form Styles --- */
-
-
-        /* Button Styling */
         .button-group { margin-top: 25px; }
         .save-btn { padding: 12px 25px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
         .save-btn:hover { background-color: #1e7e34; }
         .cancel-link { color: #6c757d; margin-left: 15px; text-decoration: none; }
-
-        /* NEW: Select2 Width Fix */
-        .select2-container {
-            width: 100% !important;
-            box-sizing: border-box;
-        }
+        .select2-container { width: 100% !important; box-sizing: border-box; }
     </style>
 </head>
 <body>
 <div class="container">
     {% include "tax_processor/base_navigation.html" %}
+
     <h1>Լուծել Գործարքը (#{{ unmatched_item.pk }})</h1>
 
     {% if resolution_form.non_field_errors or rule_form.non_field_errors or condition_formset.non_field_errors %}
     <div style="color: red; padding: 10px; border: 1px solid red; margin-bottom: 15px;">
-        <h4>Խնդրում ենք ուղղել ստորև նշված սխալները:</h4> {# Please correct the errors below #}
+        <h4>Խնդրում ենք ուղղել ստորև նշված սխալները:</h4>
         <ul style="margin: 0; padding-left: 20px;">
             {% for error in resolution_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
             {% for error in rule_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
@@ -88,11 +67,12 @@
     </div>
     {% endif %}
 
-
     <h2>Գործարքի Մանրամասները</h2>
     <div class="detail-box">
         <p><strong>Ամսաթիվ։</strong> {{ transaction.transaction_date|date:"Y-m-d H:i" }}</p>
-        <p><strong>Գումար։</strong> <em style="color: #007bff;">{{ transaction.amount }} {{ transaction.currency }}</em></p>
+        <p><strong>Գումար։</strong> <em {% if transaction.is_expense %}style="color: #dc3545;"{% endif %}>
+            {% if transaction.is_expense %}-{% endif %}{{ transaction.amount }} {{ transaction.currency }}
+        </em></p>
         <p><strong>Ուղարկող։</strong> {{ transaction.sender }} (Հաշիվ։ {{ transaction.sender_account|default:"N/A" }})</p>
         <p><strong>Նկարագրություն։</strong> <em>{{ transaction.description }}</em></p>
         <p><small>Պատկանում է Հայտարարագրին։ {{ transaction.statement.declaration.name }}</small></p>
@@ -103,7 +83,6 @@
         {% csrf_token %}
         {{ resolution_form.unmatched_id }}
 
-        {# --- Resolution Form Fields --- #}
         <div class="form-field">
             {{ resolution_form.resolved_point.label_tag }}
             {{ resolution_form.resolved_point }}
@@ -122,7 +101,6 @@
             {% for error in resolution_form.rule_action.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
         </div>
 
-        {# --- Conditional Section: Propose Global Notes --- #}
         <div id="proposal-notes-section" class="form-field">
             {{ resolution_form.rule_notes.label_tag }}
             {{ resolution_form.rule_notes }}
@@ -130,11 +108,8 @@
             {% for error in resolution_form.rule_notes.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
         </div>
 
-        {# --- Conditional Section: Create Specific Rule Form --- #}
         <div id="rule-creation-form-section">
-            <h3>Նոր Հատուկ Կանոնի Մանրամասներ</h3> {# New Specific Rule Details #}
-
-            {# Render TaxRuleForm fields #}
+            <h3>Նոր Հատուկ Կանոնի Մանրամասներ</h3>
             <div class="field-group">
                 {% for field in rule_form %}
                 <div class="form-field">
@@ -146,9 +121,8 @@
                 {% endfor %}
             </div>
 
-            {# Render ConditionFormSet #}
             <div class="conditions-section">
-                <h3>Կանոնի Պայմաններ</h3> {# Rule Conditions #}
+                <h3>Կանոնի Պայմաններ</h3>
                 {{ condition_formset.management_form }}
                 {% if condition_formset.non_form_errors %}
                 <div style="color: red;">
@@ -161,22 +135,28 @@
                         {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                         <div>{{ form.field.label_tag }} {{ form.field }} {% for error in form.field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
                         <div>{{ form.condition_type.label_tag }} {{ form.condition_type }} {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
-                        {# --- UPDATED value field rendering --- #}
-                        <div>
-                            {{ form.value.label_tag }}
-                            <input type="text" name="{{ form.prefix }}-value" value="{{ form.value.value|default:'' }}"
-                                   placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ form.prefix }}-value_text">
-                            <select name="{{ form.prefix }}-value" class="condition-value-select form-control" id="id_{{ form.prefix }}-value_select" style="display: none;">
-                                <option value="">---------</option>
-                                {% for bank_name in bank_names %}
-                                <option value="{{ bank_name }}" {% if form.value.value == bank_name %}selected{% endif %}>
-                                    {{ bank_name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+
+                        <div class="condition-value-container">
+                            <div class="condition-value-input-wrapper">
+                                {{ form.value.label_tag }} {{ form.value }}
+                                {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                            </div>
+                            <div class="condition-value-select-wrapper" style="display: none;">
+                                <label for="id_{{ form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                                <select name="{{ form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ form.prefix }}-value_select_bank">
+                                    <option value="">---------</option>
+                                    {% for bank_name in bank_names %}
+                                    <option value="{{ bank_name }}" {% if form.value.value == bank_name %}selected{% endif %}>
+                                        {{ bank_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="condition-value-field-wrapper" style="display: none;">
+                                {{ form.value_field.label_tag }} {{ form.value_field }}
+                                {% for error in form.value_field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                            </div>
                         </div>
-                        {# --- END UPDATED div --- #}
                         <div style="align-self: flex-end;">{% if condition_formset.can_delete %}<div style="display: none;">{{ form.DELETE }}</div><button type="button" class="btn btn-danger btn-remove">Ջնջել</button>{% endif %}</div>
                         {% if form.non_field_errors %}
                         <div style="grid-column: 1 / -1; color: red;">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
@@ -184,23 +164,28 @@
                     </div>
                     {% endfor %}
                 </div>
-                {# Template for new forms #}
+
                 <div id="empty-form-template" style="display: none;">
                     <div class="condition-form-row">
                         {% for hidden in condition_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
                         <div>{{ condition_formset.empty_form.field.label_tag }} {{ condition_formset.empty_form.field }}</div>
                         <div>{{ condition_formset.empty_form.condition_type.label_tag }} {{ condition_formset.empty_form.condition_type }}</div>
-                        {# --- UPDATED value field rendering in template --- #}
-                        <div>
-                            {{ condition_formset.empty_form.value.label_tag }}
-                            <input type="text" name="{{ condition_formset.empty_form.prefix }}-value" value=""
-                                   placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ condition_formset.empty_form.prefix }}-value_text">
-                            <select name="{{ condition_formset.empty_form.prefix }}-value" class="condition-value-select form-control" id="id_{{ condition_formset.empty_form.prefix }}-value_select" style="display: none;">
-                                <option value="">---------</option>
-                                {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
-                            </select>
+
+                        <div class="condition-value-container">
+                            <div class="condition-value-input-wrapper">
+                                {{ condition_formset.empty_form.value.label_tag }} {{ condition_formset.empty_form.value }}
+                            </div>
+                            <div class="condition-value-select-wrapper" style="display: none;">
+                                <label for="id_{{ condition_formset.empty_form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                                <select name="{{ condition_formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ condition_formset.empty_form.prefix }}-value_select_bank">
+                                    <option value="">---------</option>
+                                    {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
+                                </select>
+                            </div>
+                            <div class="condition-value-field-wrapper" style="display: none;">
+                                {{ condition_formset.empty_form.value_field.label_tag }} {{ condition_formset.empty_form.value_field }}
+                            </div>
                         </div>
-                        {# --- END UPDATED div --- #}
                         <div style="align-self: flex-end;">{% if condition_formset.can_delete %}<div style="display: none;">{{ condition_formset.empty_form.DELETE }}</div><button type="button" class="btn btn-danger btn-remove">Ջնջել</button>{% endif %}</div>
                     </div>
                 </div>
@@ -208,20 +193,18 @@
             </div>
         </div>
 
-        {# --- Submit Button --- #}
         <div class="button-group">
-            <button type="submit" class="save-btn">Պահպանել Լուծումը</button> {# Save Resolution #}
-            <a href="{% url 'review_queue_declaration' declaration_id=transaction.statement.declaration.id %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
+            <button type="submit" class="save-btn">Պահպանել Լուծումը</button>
+            <a href="{% url 'review_queue_declaration' declaration_id=transaction.statement.declaration.id %}" class="cancel-link">Չեղարկել</a>
         </div>
     </form>
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="{% static 'tax_processor/select2/select2.min.js' %}"></script>
 
-    {# --- UPDATED JAVASCRIPT --- #}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // ... (existing script for Action Radios) ...
+            // --- Logic for Action Radios ---
             const ruleActionRadios = document.querySelectorAll('input[name="{{ resolution_form.rule_action.html_name }}"]');
             const ruleCreationSection = document.getElementById('rule-creation-form-section');
             const proposalNotesSection = document.getElementById('proposal-notes-section');
@@ -237,51 +220,97 @@
                 toggleActionSections(); // Initial call
             }
 
-            // ... (existing script for Bank Name Select Logic) ...
+            // --- Configuration ---
+            const DYNAMIC_CONDITION_TYPES = [
+                'CONTAINS_FIELD_VALUE',
+                'NOT_CONTAINS_FIELD_VALUE',
+                'EQUALS_FIELD_VALUE'
+            ];
             const BANK_FIELD_VALUE = 'statement__bank_name';
-            function handleFieldChange(fieldSelectElement) {
-                const row = fieldSelectElement.closest('.condition-form-row');
-                if (!row) return;
-                const valueTextInput = row.querySelector('.condition-value-input');
-                const valueSelect = row.querySelector('.condition-value-select');
-                const isBankField = (fieldSelectElement.value === BANK_FIELD_VALUE);
-                if (!valueTextInput || !valueSelect) return;
 
-                if (isBankField) {
-                    valueTextInput.style.display = 'none';
-                    valueSelect.style.display = 'block';
-                    valueSelect.name = valueTextInput.getAttribute('data-original-name') || valueTextInput.name;
-                    valueTextInput.setAttribute('data-original-name', valueTextInput.name);
+            /**
+             * Main function to toggle the visibility of the three value widgets
+             * based on the selected Field and Condition Type.
+             */
+            function updateValueWidgets(elementInRow) {
+                const row = elementInRow.closest('.condition-form-row');
+                if (!row) return;
+
+                // Find all elements in the row
+                const conditionTypeSelect = row.querySelector('.condition-type');
+                const fieldSelect = row.querySelector('.condition-field');
+
+                const valueTextWrapper = row.querySelector('.condition-value-input-wrapper');
+                const valueBankWrapper = row.querySelector('.condition-value-select-wrapper');
+                const valueFieldWrapper = row.querySelector('.condition-value-field-wrapper');
+
+                if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper) {
+                    console.error("Could not find all required elements in formset row.", row);
+                    return;
+                }
+
+                // Get current selected values
+                const conditionType = conditionTypeSelect.value;
+                const fieldType = fieldSelect.value;
+
+                // --- Logic to show/hide widgets ---
+                const isDynamic = DYNAMIC_CONDITION_TYPES.includes(conditionType);
+                const isBankField = (fieldType === BANK_FIELD_VALUE);
+
+                valueFieldWrapper.style.display = isDynamic ? 'block' : 'none';
+                valueBankWrapper.style.display = (!isDynamic && isBankField) ? 'block' : 'none';
+                valueTextWrapper.style.display = (!isDynamic && !isBankField) ? 'block' : 'none';
+
+                // --- Logic to swap 'name' attribute ---
+                const valueTextInput = valueTextWrapper.querySelector('input');
+                const valueBankSelect = valueBankWrapper.querySelector('select');
+                const valueFieldSelect = valueFieldWrapper.querySelector('select');
+
+                if (!valueTextInput || !valueBankSelect || !valueFieldSelect) return;
+
+                if (!valueTextInput.dataset.originalName) valueTextInput.dataset.originalName = valueTextInput.name;
+                if (!valueBankSelect.dataset.originalName) valueBankSelect.dataset.originalName = valueBankSelect.name;
+                if (!valueFieldSelect.dataset.originalName) valueFieldSelect.dataset.originalName = valueFieldSelect.name;
+
+                if (isDynamic) {
+                    valueFieldSelect.name = valueFieldSelect.dataset.originalName;
                     valueTextInput.name = '';
-                } else {
-                    valueTextInput.style.display = 'block';
-                    valueSelect.style.display = 'none';
-                    valueTextInput.name = valueSelect.getAttribute('data-original-name') || valueSelect.name;
-                    valueSelect.setAttribute('data-original-name', valueSelect.name);
-                    valueSelect.name = '';
+                    valueBankSelect.name = '';
+                } else if (isBankField) {
+                    valueBankSelect.name = valueBankSelect.dataset.originalName;
+                    valueTextInput.name = '';
+                    valueFieldSelect.name = '';
+                } else { // Is static text input
+                    valueTextInput.name = valueTextInput.dataset.originalName;
+                    valueBankSelect.name = '';
+                    valueFieldSelect.name = '';
                 }
             }
 
-            // ... (existing script for Dynamic Formset Add/Remove/Widget Swap) ...
+            // --- Formset (Add/Remove) Logic ---
             const formList = document.getElementById('condition-form-list');
             const addBtn = document.getElementById('add-condition-btn');
             const emptyFormTemplateDiv = document.getElementById('empty-form-template');
             const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
             const totalFormsInput = document.querySelector('input[name="{{ condition_formset.prefix }}-TOTAL_FORMS"]');
-            const formPrefix = '{{ condition_formset.prefix }}';
 
-            formList.querySelectorAll('.condition-form-row').forEach(row => {
+            function initializeRow(row) {
                 const fieldSelect = row.querySelector('.condition-field');
-                const valueInput = row.querySelector('.condition-value-input');
-                const valueSelect = row.querySelector('.condition-value-select');
-                if (valueInput) valueInput.setAttribute('data-original-name', valueInput.name);
-                if (valueSelect) valueSelect.setAttribute('data-original-name', valueSelect.name);
-                if (fieldSelect) {
-                    handleFieldChange(fieldSelect);
-                    fieldSelect.addEventListener('change', function(event) { handleFieldChange(event.target); });
-                }
-            });
+                const conditionTypeSelect = row.querySelector('.condition-type');
 
+                if (fieldSelect) {
+                    fieldSelect.addEventListener('change', () => updateValueWidgets(fieldSelect));
+                }
+                if (conditionTypeSelect) {
+                    conditionTypeSelect.addEventListener('change', () => updateValueWidgets(conditionTypeSelect));
+                }
+                updateValueWidgets(fieldSelect || conditionTypeSelect);
+            }
+
+            // Initialize all existing forms
+            formList.querySelectorAll('.condition-form-row').forEach(initializeRow);
+
+            // Handle adding new forms
             if (addBtn && emptyFormTemplate && totalFormsInput) {
                 addBtn.addEventListener('click', function() {
                     let currentFormCount = parseInt(totalFormsInput.value, 10);
@@ -289,22 +318,16 @@
                     let tempDiv = document.createElement('div');
                     tempDiv.innerHTML = newFormHtml;
                     const newRow = tempDiv.firstElementChild;
+
                     if (newRow) {
                         formList.appendChild(newRow);
                         totalFormsInput.value = currentFormCount + 1;
-                        const newFieldSelect = newRow.querySelector('.condition-field');
-                        if (newFieldSelect) {
-                            const newValueInput = newRow.querySelector('.condition-value-input');
-                            const newValueSelect = newRow.querySelector('.condition-value-select');
-                            if (newValueInput) newValueInput.setAttribute('data-original-name', newValueInput.name);
-                            if (newValueSelect) newValueSelect.setAttribute('data-original-name', newValueSelect.name);
-                            handleFieldChange(newFieldSelect);
-                            newFieldSelect.addEventListener('change', function(event) { handleFieldChange(event.target); });
-                        }
+                        initializeRow(newRow);
                     }
                 });
-            } else { console.error("Formset JS (Add) elements not found."); }
+            }
 
+            // Handle removing forms
             formList.addEventListener('click', function(e) {
                 if (e.target && e.target.classList.contains('btn-remove')) {
                     let row = e.target.closest('.condition-form-row');
@@ -314,19 +337,15 @@
                 }
             });
 
-            // --- NEW: Initialize Select2 ---
-            // We use jQuery here because Select2 is a jQuery plugin
+            // --- Select2 Initialization ---
             $('#{{ resolution_form.resolved_point.id_for_label }}').select2({
-                placeholder: "Ընտրեք կատեգորիա", // "Select a category"
+                placeholder: "Ընտրեք կատեգորիա",
                 allowClear: true
             });
-
-            // Also initialize the one inside the hidden rule form
             $('#{{ rule_form.declaration_point.id_for_label }}').select2({
-                placeholder: "Ընտրեք կատեգորիա", // "Select a category"
+                placeholder: "Ընտրեք կատեգորիա",
                 allowClear: true
             });
-            // --- END NEW SCRIPT ---
         });
     </script>
 </div>

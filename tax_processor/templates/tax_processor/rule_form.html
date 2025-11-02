@@ -1,6 +1,7 @@
 {% load static %}
+{% load i18n %} {# NEW: Load i18n for template tags #}
 <!DOCTYPE html>
-<html lang="hy"> {# Armenian language specified #}
+<html lang="hy">
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
@@ -8,7 +9,6 @@
     <link href="{% static 'tax_processor/select2/select2.min.css' %}" rel="stylesheet" />
 
     <style>
-        /* (Keep existing styles) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
         .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; margin-bottom: 25px; }
@@ -27,8 +27,9 @@
         .condition-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; align-items: flex-start; }
         .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
 
-        /* Value Input/Select Styling */
-        .form-control { /* Common style for inputs/selects in formset */
+        /* NEW: Wrapper for value inputs */
+        .condition-value-container { display: flex; flex-direction: column; }
+        .condition-value-container .form-control { /* Common style for inputs/selects in formset */
             width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
         }
 
@@ -39,20 +40,16 @@
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
         .cancel-link { color: #dc3545; margin-left: 15px; text-decoration: none; }
-
-        /* NEW: Select2 Width Fix */
-        .select2-container {
-            width: 100% !important;
-            box-sizing: border-box;
-        }
+        .select2-container { width: 100% !important; box-sizing: border-box; }
     </style>
 </head>
 <body>
 <div class="container">
     {% include "tax_processor/base_navigation.html" %}
+
     <h1>{{ title }}</h1>
     {% if declaration %}
-    <h2>Հայտարարագիր։ {{ declaration.name }}</h2> {# Declaration: #}
+    <h2>Հայտարարագիր։ {{ declaration.name }}</h2>
     {% endif %}
 
     <form method="post" id="rule-form">
@@ -60,7 +57,7 @@
 
         {% if form.non_field_errors or formset.non_field_errors %}
         <div style="color: red; padding: 10px; border: 1px solid red; margin-bottom: 15px;">
-            <h4>Խնդրում ենք ուղղել սխալները։</h4> {# Please correct the errors. #}
+            <h4>Խնդրում ենք ուղղել սխալները։</h4>
             <ul style="margin: 0; padding-left: 20px;">
                 {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
                 {% for error in formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
@@ -85,7 +82,7 @@
         </div>
 
         <div class="conditions-section">
-            <h2>Կանոնի Պայմաններ</h2> {# Rule Conditions #}
+            <h2>Կանոնի Պայմաններ</h2>
             {{ formset.management_form }}
             {% if formset.non_form_errors %}
             <div style="color: red;">
@@ -104,28 +101,32 @@
                         {{ form.condition_type.label_tag }} {{ form.condition_type }}
                         {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                     </div>
-                    {# --- UPDATED value field rendering --- #}
-                    <div>
-                        {{ form.value.label_tag }}
-                        {# Text Input (default) #}
-                        <input type="text" name="{{ form.prefix }}-value" value="{{ form.value.value|default:'' }}"
-                               placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ form.prefix }}-value_text">
-                        {# Select Dropdown (for Bank Name, hidden initially) #}
-                        <select name="{{ form.prefix }}-value" class="condition-value-select form-control" id="id_{{ form.prefix }}-value_select" style="display: none;">
-                            <option value="">---------</option>
-                            {% for bank_name in bank_names %}
-                            <option value="{{ bank_name }}" {% if form.value.value == bank_name %}selected{% endif %}>
-                                {{ bank_name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+
+                    <div class="condition-value-container">
+                        <div class="condition-value-input-wrapper">
+                            {{ form.value.label_tag }} {{ form.value }}
+                            {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                        </div>
+                        <div class="condition-value-select-wrapper" style="display: none;">
+                            <label for="id_{{ form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <select name="{{ form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ form.prefix }}-value_select_bank">
+                                <option value="">---------</option>
+                                {% for bank_name in bank_names %}
+                                <option value="{{ bank_name }}" {% if form.value.value == bank_name %}selected{% endif %}>
+                                    {{ bank_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="condition-value-field-wrapper" style="display: none;">
+                            {{ form.value_field.label_tag }} {{ form.value_field }}
+                            {% for error in form.value_field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
+                        </div>
                     </div>
-                    {# --- END UPDATED div --- #}
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ form.DELETE }}</div>
-                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button> {# Delete #}
+                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
                         {% endif %}
                     </div>
                     {% if form.non_field_errors %}
@@ -142,34 +143,39 @@
                     {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
                     <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
                     <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>
-                    {# --- UPDATED value field rendering in template --- #}
-                    <div>
-                        {{ formset.empty_form.value.label_tag }}
-                        <input type="text" name="{{ formset.empty_form.prefix }}-value" value=""
-                               placeholder="Մուտքագրեք արժեքը..." class="condition-value-input form-control" id="id_{{ formset.empty_form.prefix }}-value_text">
-                        <select name="{{ formset.empty_form.prefix }}-value" class="condition-value-select form-control" id="id_{{ formset.empty_form.prefix }}-value_select" style="display: none;">
-                            <option value="">---------</option>
-                            {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
-                        </select>
+
+                    <div class="condition-value-container">
+                        <div class="condition-value-input-wrapper">
+                            {{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}
+                        </div>
+                        <div class="condition-value-select-wrapper" style="display: none;">
+                            <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <select name="{{ formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ formset.empty_form.prefix }}-value_select_bank">
+                                <option value="">---------</option>
+                                {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
+                            </select>
+                        </div>
+                        <div class="condition-value-field-wrapper" style="display: none;">
+                            {{ formset.empty_form.value_field.label_tag }} {{ formset.empty_form.value_field }}
+                        </div>
                     </div>
-                    {# --- END UPDATED div --- #}
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
-                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button> {# Delete #}
+                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
                         {% endif %}
                     </div>
                 </div>
             </div>
-            <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button> {# Add Condition #}
+            <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button>
         </div>
 
-        <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Պահպանել Կանոնը</button> {# Save Rule #}
+        <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Պահպանել Կանոնը</button>
 
         {% if is_specific_rule %}
-        <a href="{% url list_url_name declaration_id=declaration.id %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
+        <a href="{% url list_url_name declaration_id=declaration.id %}" class="cancel-link">Չեղարկել</a>
         {% else %}
-        <a href="{% url list_url_name %}" class="cancel-link">Չեղարկել</a> {# Cancel #}
+        <a href="{% url list_url_name %}" class="cancel-link">Չեղարկել</a>
         {% endif %}
     </form>
 </div>
@@ -179,53 +185,108 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const BANK_FIELD_VALUE = 'statement__bank_name'; // Value for Bank Name field
+        // --- Configuration ---
+        // Condition types that use the dynamic field dropdown
+        const DYNAMIC_CONDITION_TYPES = [
+            'CONTAINS_FIELD_VALUE',
+            'NOT_CONTAINS_FIELD_VALUE',
+            'EQUALS_FIELD_VALUE'
+        ];
+        // The field value that triggers the bank name dropdown
+        const BANK_FIELD_VALUE = 'statement__bank_name';
 
-        function handleFieldChange(fieldSelectElement) {
-            const row = fieldSelectElement.closest('.condition-form-row');
+        /**
+         * Main function to toggle the visibility of the three value widgets
+         * based on the selected Field and Condition Type.
+         */
+        function updateValueWidgets(elementInRow) {
+            const row = elementInRow.closest('.condition-form-row');
             if (!row) return;
 
-            const valueTextInput = row.querySelector('.condition-value-input');
-            const valueSelect = row.querySelector('.condition-value-select');
-            const isBankField = (fieldSelectElement.value === BANK_FIELD_VALUE);
+            // Find all elements in the row
+            const conditionTypeSelect = row.querySelector('.condition-type');
+            const fieldSelect = row.querySelector('.condition-field');
 
-            if (!valueTextInput || !valueSelect) return;
+            const valueTextWrapper = row.querySelector('.condition-value-input-wrapper');
+            const valueBankWrapper = row.querySelector('.condition-value-select-wrapper');
+            const valueFieldWrapper = row.querySelector('.condition-value-field-wrapper');
 
-            if (isBankField) {
-                valueTextInput.style.display = 'none';
-                valueSelect.style.display = 'block';
-                valueSelect.name = valueTextInput.getAttribute('data-original-name') || valueTextInput.name;
-                valueTextInput.setAttribute('data-original-name', valueTextInput.name);
+            if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper) {
+                console.error("Could not find all required elements in formset row.", row);
+                return;
+            }
+
+            // Get current selected values
+            const conditionType = conditionTypeSelect.value;
+            const fieldType = fieldSelect.value;
+
+            // --- Logic to show/hide widgets ---
+            const isDynamic = DYNAMIC_CONDITION_TYPES.includes(conditionType);
+            const isBankField = (fieldType === BANK_FIELD_VALUE);
+
+            // 1. Show/Hide the Dynamic Field Dropdown
+            valueFieldWrapper.style.display = isDynamic ? 'block' : 'none';
+
+            // 2. Show/Hide the Bank Name Dropdown
+            // Show only if NOT dynamic AND the field is bank_name
+            valueBankWrapper.style.display = (!isDynamic && isBankField) ? 'block' : 'none';
+
+            // 3. Show/Hide the default Text Input
+            // Show only if NOT dynamic AND the field is NOT bank_name
+            valueTextWrapper.style.display = (!isDynamic && !isBankField) ? 'block' : 'none';
+
+            // --- Logic to swap 'name' attribute ---
+            // Get all input/select elements
+            const valueTextInput = valueTextWrapper.querySelector('input');
+            const valueBankSelect = valueBankWrapper.querySelector('select');
+            const valueFieldSelect = valueFieldWrapper.querySelector('select');
+
+            // Store original names if not already stored
+            if (!valueTextInput.dataset.originalName) valueTextInput.dataset.originalName = valueTextInput.name;
+            if (!valueBankSelect.dataset.originalName) valueBankSelect.dataset.originalName = valueBankSelect.name;
+            if (!valueFieldSelect.dataset.originalName) valueFieldSelect.dataset.originalName = valueFieldSelect.name;
+
+            // Set the 'name' attribute only for the visible element
+            if (isDynamic) {
+                valueFieldSelect.name = valueFieldSelect.dataset.originalName;
                 valueTextInput.name = '';
-            } else {
-                valueTextInput.style.display = 'block';
-                valueSelect.style.display = 'none';
-                valueTextInput.name = valueSelect.getAttribute('data-original-name') || valueSelect.name;
-                valueSelect.setAttribute('data-original-name', valueSelect.name);
-                valueSelect.name = '';
+                valueBankSelect.name = '';
+            } else if (isBankField) {
+                valueBankSelect.name = valueBankSelect.dataset.originalName;
+                valueTextInput.name = '';
+                valueFieldSelect.name = '';
+            } else { // Is static text input
+                valueTextInput.name = valueTextInput.dataset.originalName;
+                valueBankSelect.name = '';
+                valueFieldSelect.name = '';
             }
         }
 
+        // --- Formset (Add/Remove) Logic ---
         const formList = document.getElementById('condition-form-list');
         const addBtn = document.getElementById('add-condition-btn');
         const emptyFormTemplateDiv = document.getElementById('empty-form-template');
         const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
         const totalFormsInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
-        const formPrefix = totalFormsInput ? totalFormsInput.name.split('-')[0] : '{{ formset.prefix }}';
 
-        formList.querySelectorAll('.condition-field').forEach(selectElement => {
-            const row = selectElement.closest('.condition-form-row');
-            const valueInput = row.querySelector('.condition-value-input');
-            const valueSelect = row.querySelector('.condition-value-select');
-            if (valueInput) valueInput.setAttribute('data-original-name', valueInput.name);
-            if (valueSelect) valueSelect.setAttribute('data-original-name', valueSelect.name);
+        function initializeRow(row) {
+            const fieldSelect = row.querySelector('.condition-field');
+            const conditionTypeSelect = row.querySelector('.condition-type');
 
-            handleFieldChange(selectElement);
-            selectElement.addEventListener('change', function(event) {
-                handleFieldChange(event.target);
-            });
-        });
+            if (fieldSelect) {
+                fieldSelect.addEventListener('change', () => updateValueWidgets(fieldSelect));
+            }
+            if (conditionTypeSelect) {
+                conditionTypeSelect.addEventListener('change', () => updateValueWidgets(conditionTypeSelect));
+            }
+            // Run once on init
+            updateValueWidgets(fieldSelect || conditionTypeSelect);
+        }
 
+        // Initialize all existing forms
+        formList.querySelectorAll('.condition-form-row').forEach(initializeRow);
+
+        // Handle adding new forms
         if (addBtn && emptyFormTemplate && totalFormsInput) {
             addBtn.addEventListener('click', function() {
                 let currentFormCount = parseInt(totalFormsInput.value, 10);
@@ -237,22 +298,13 @@
                 if (newRow) {
                     formList.appendChild(newRow);
                     totalFormsInput.value = currentFormCount + 1;
-                    const newFieldSelect = newRow.querySelector('.condition-field');
-                    if (newFieldSelect) {
-                        const newValueInput = newRow.querySelector('.condition-value-input');
-                        const newValueSelect = newRow.querySelector('.condition-value-select');
-                        if (newValueInput) newValueInput.setAttribute('data-original-name', newValueInput.name);
-                        if (newValueSelect) newValueSelect.setAttribute('data-original-name', newValueSelect.name);
-
-                        handleFieldChange(newFieldSelect);
-                        newFieldSelect.addEventListener('change', function(event) {
-                            handleFieldChange(event.target);
-                        });
-                    }
+                    // Initialize the new row
+                    initializeRow(newRow);
                 }
             });
-        } else { console.error("Formset JS (Add) elements not found."); }
+        }
 
+        // Handle removing forms
         formList.addEventListener('click', function(e) {
             if (e.target && e.target.classList.contains('btn-remove')) {
                 let row = e.target.closest('.condition-form-row');
@@ -262,15 +314,12 @@
             }
         });
 
-        // --- NEW: Initialize Select2 ---
-        // We use jQuery here because Select2 is a jQuery plugin
+        // --- Select2 Initialization ---
         $('#{{ form.declaration_point.id_for_label }}').select2({
-            placeholder: "Ընտրեք կատեգորիա", // "Select a category"
+            placeholder: "Ընտրեք կատեգորիա",
             allowClear: true
         });
-        // --- END NEW SCRIPT ---
     });
 </script>
-
 </body>
 </html>
