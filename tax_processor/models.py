@@ -6,7 +6,6 @@ from django.db.models import F
 
 # ====================================================================
 # 1. USER AND ROLE MANAGEMENT
-#    (No changes here)
 # ====================================================================
 
 class UserProfile(models.Model):
@@ -35,7 +34,6 @@ class UserProfile(models.Model):
 
 # ====================================================================
 # 2. DECLARATION ENTITY
-#    (No changes here)
 # ====================================================================
 
 class Declaration(models.Model):
@@ -66,7 +64,6 @@ class Declaration(models.Model):
 
 # ====================================================================
 # 3. STATEMENT METADATA
-#    (No changes here)
 # ====================================================================
 
 class Statement(models.Model):
@@ -88,7 +85,6 @@ class Statement(models.Model):
 
 # ====================================================================
 # 4. DECLARATION POINT
-#    (No changes here)
 # ====================================================================
 class DeclarationPoint(models.Model):
     name = models.CharField(max_length=255, unique=True, verbose_name="Tax Category Name")
@@ -108,7 +104,6 @@ class DeclarationPoint(models.Model):
 
 # ====================================================================
 # 5. TAX RULES
-#    (No changes here)
 # ====================================================================
 
 class TaxRule(models.Model):
@@ -149,13 +144,9 @@ class TaxRule(models.Model):
 
 # ====================================================================
 # 6. TRANSACTION DATA
-#    (MODIFIED: Added is_expense)
 # ====================================================================
 
 class Transaction(models.Model):
-    """
-    Universal table storing all incoming financial transactions.
-    """
     ENTITY_CHOICES = (
         ('UNDETERMINED', 'Անորոշ'),
         ('INDIVIDUAL', 'Ֆիզ. անձ'),
@@ -176,10 +167,7 @@ class Transaction(models.Model):
     description = models.TextField()
     sender = models.CharField(max_length=255)
     sender_account = models.CharField(max_length=50, blank=True, null=True)
-
-    # --- NEW FIELD ---
     is_expense = models.BooleanField(default=False, verbose_name="Is Expense (Outgoing)")
-    # --- END NEW FIELD ---
 
     # Analysis Result
     matched_rule = models.ForeignKey(TaxRule, on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions')
@@ -199,7 +187,7 @@ class Transaction(models.Model):
     transaction_scope = models.CharField(
         max_length=20,
         choices=SCOPE_CHOICES,
-        default='UNDETERMINED', # Reverted to UNDETERMINED per our discussion
+        default='UNDETERMINED',
         verbose_name="Transaction Scope"
     )
 
@@ -215,7 +203,6 @@ class Transaction(models.Model):
 
 # ====================================================================
 # 7. UNMATCHED TRANSACTIONS
-#    (No changes here)
 # ====================================================================
 
 class UnmatchedTransaction(models.Model):
@@ -250,7 +237,6 @@ class UnmatchedTransaction(models.Model):
 
 # ====================================================================
 # 8. NEW RULE MODELS
-#    (No changes here)
 # ====================================================================
 
 class EntityTypeRule(models.Model):
@@ -313,3 +299,23 @@ class TransactionScopeRule(models.Model):
         verbose_name_plural = "Rules (Transaction Scope)"
         unique_together = ('declaration', 'rule_name')
         ordering = ['priority', 'rule_name']
+
+# --- NEW: ExchangeRate Model ---
+class ExchangeRate(models.Model):
+    """
+    Stores historical daily exchange rates from the Central Bank.
+    """
+    date = models.DateField(verbose_name="Date")
+    currency_code = models.CharField(max_length=3, verbose_name="Currency Code") # e.g., "USD"
+    rate = models.DecimalField(max_digits=10, decimal_places=4, verbose_name="Rate (per 1 unit of foreign currency)")
+
+    def __str__(self):
+        return f"{self.date} - {self.currency_code}: {self.rate}"
+
+    class Meta:
+        verbose_name = "Exchange Rate"
+        verbose_name_plural = "Exchange Rates"
+        # Ensure we only have one rate per currency per day
+        unique_together = ('date', 'currency_code')
+        ordering = ['-date', 'currency_code']
+# --- END NEW ---

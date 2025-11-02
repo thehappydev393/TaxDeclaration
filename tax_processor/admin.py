@@ -8,12 +8,11 @@ from django.urls import reverse
 from .models import (
     UserProfile, Declaration, Statement, TaxRule,
     Transaction, UnmatchedTransaction, DeclarationPoint,
-    EntityTypeRule, TransactionScopeRule # NEW: Import new models
+    EntityTypeRule, TransactionScopeRule, ExchangeRate # NEW: Import ExchangeRate
 )
 
 # -----------------------------------------------------------
 # 1. User/Role Admin Setup
-#    (No changes here)
 # -----------------------------------------------------------
 
 class UserProfileInline(admin.StackedInline):
@@ -42,7 +41,6 @@ admin.site.register(User, UserAdmin)
 
 # -----------------------------------------------------------
 # 2. Declaration and Statement Administration
-#    (MODIFIED: DeclarationAdmin)
 # -----------------------------------------------------------
 
 class StatementInline(admin.TabularInline):
@@ -57,13 +55,11 @@ class StatementInline(admin.TabularInline):
 
 @admin.register(Declaration)
 class DeclarationAdmin(admin.ModelAdmin):
-    # NEW: Added first_name, last_name
     list_display = ('name', 'first_name', 'last_name', 'tax_period_start', 'tax_period_end', 'status', 'run_analysis_action')
     list_filter = ('status',)
-    search_fields = ('name', 'client_reference', 'first_name', 'last_name') # NEW: Added search fields
+    search_fields = ('name', 'client_reference', 'first_name', 'last_name')
     inlines = [StatementInline]
 
-    # NEW: Added fields to fieldset
     fieldsets = (
         (None, {
             'fields': ('name', 'client_reference', 'first_name', 'last_name')
@@ -82,9 +78,7 @@ class DeclarationAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
-    # Method to count unassigned transactions and link to the detail/analysis view
     def run_analysis_action(self, obj):
-        # (No change to this method)
         unassigned_count = Transaction.objects.filter(
             statement__declaration=obj,
             declaration_point__isnull=True
@@ -108,30 +102,25 @@ class StatementAdmin(admin.ModelAdmin):
 
 # -----------------------------------------------------------
 # 3. Transaction and Rules Administration
-#    (MODIFIED: DeclarationPointAdmin, TransactionAdmin)
-#    (NEW: EntityTypeRuleAdmin, TransactionScopeRuleAdmin)
 # -----------------------------------------------------------
 
 @admin.register(DeclarationPoint)
 class DeclarationPointAdmin(admin.ModelAdmin):
-    # NEW: Added is_auto_filled
     list_display = ('name', 'is_income', 'is_auto_filled', 'description')
-    list_filter = ('is_income', 'is_auto_filled') # NEW: Added filter
+    list_filter = ('is_income', 'is_auto_filled')
     search_fields = ('name',)
-    fields = ('name', 'is_income', 'is_auto_filled', 'description') # NEW: Added field
+    fields = ('name', 'is_income', 'is_auto_filled', 'description')
 
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    # NEW: Added entity_type, transaction_scope
     list_display = ('__str__', 'statement', 'declaration_point', 'entity_type', 'transaction_scope', 'matched_rule', 'amount')
-    list_filter = ('declaration_point', 'currency', 'statement__bank_name', 'entity_type', 'transaction_scope') # NEW: Added filters
+    list_filter = ('declaration_point', 'currency', 'statement__bank_name', 'entity_type', 'transaction_scope')
     search_fields = ('description', 'sender', 'sender_account')
-    readonly_fields = ('statement', 'transaction_date', 'amount', 'currency', 'description', 'sender', 'sender_account', 'matched_rule')
-    # NEW: Added new fields to fieldset for editing
+    readonly_fields = ('statement', 'transaction_date', 'amount', 'currency', 'description', 'sender', 'sender_account', 'matched_rule', 'is_expense')
     fieldsets = (
         ('Core Info', {
-            'fields': ('statement', 'transaction_date', 'amount', 'currency', 'description', 'sender', 'sender_account')
+            'fields': ('statement', 'transaction_date', 'amount', 'currency', 'is_expense', 'description', 'sender', 'sender_account')
         }),
         ('Categorization', {
             'fields': ('declaration_point', 'matched_rule', 'entity_type', 'transaction_scope')
@@ -141,7 +130,6 @@ class TransactionAdmin(admin.ModelAdmin):
 
 @admin.register(TaxRule)
 class TaxRuleAdmin(admin.ModelAdmin):
-    # (No changes here, just for context)
     list_display = ('rule_name', 'priority', 'declaration_point', 'is_active', 'created_by', 'created_at', 'declaration')
     list_filter = ('is_active', 'declaration_point', 'priority', 'declaration')
     search_fields = ('rule_name', 'declaration_point__name')
@@ -161,9 +149,7 @@ class TaxRuleAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
-# --- NEW: Admin registration for new rule models ---
 class BaseRuleAdmin(admin.ModelAdmin):
-    """Base class for new rule admins to reduce repetition."""
     list_display = ('rule_name', 'priority', 'is_active', 'created_by', 'created_at', 'declaration')
     list_filter = ('is_active', 'priority', 'declaration')
     search_fields = ('rule_name',)
@@ -202,7 +188,6 @@ class TransactionScopeRuleAdmin(BaseRuleAdmin):
             'classes': ('collapse',),
         }),
     )
-# --- END NEW ---
 
 @admin.register(UnmatchedTransaction)
 class UnmatchedTransactionAdmin(admin.ModelAdmin):
@@ -210,3 +195,13 @@ class UnmatchedTransactionAdmin(admin.ModelAdmin):
     list_filter = ('status', 'assigned_user')
     search_fields = ('transaction__description', 'transaction__sender')
     raw_id_fields = ('transaction', 'assigned_user')
+
+
+# --- NEW: Register ExchangeRate Admin ---
+@admin.register(ExchangeRate)
+class ExchangeRateAdmin(admin.ModelAdmin):
+    list_display = ('date', 'currency_code', 'rate')
+    list_filter = ('currency_code', 'date')
+    search_fields = ('currency_code',)
+    ordering = ('-date', 'currency_code')
+# --- END NEW ---
