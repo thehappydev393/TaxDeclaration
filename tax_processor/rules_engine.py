@@ -150,11 +150,25 @@ class RulesEngine:
     @transaction.atomic
     def run_analysis(self, assigned_user: User):
         print(f"--- Running Analysis for Declaration ID: {self.declaration_id} ---")
-        new_transactions_qs = Transaction.objects.filter( statement__declaration_id=self.declaration_id, declaration_point__isnull=True).select_related('statement')
-        re_evaluate_tx_qs = Transaction.objects.filter( statement__declaration_id=self.declaration_id, unmatched_record__status__in=['PENDING_REVIEW', 'NEW_RULE_PROPOSED']).select_related('statement', 'unmatched_record')
+
+        # 1. SELECT TRANSACTIONS FOR ANALYSIS
+        # --- MODIFIED: Added is_expense=False ---
+        new_transactions_qs = Transaction.objects.filter(
+            statement__declaration_id=self.declaration_id,
+            declaration_point__isnull=True,
+            is_expense=False
+        ).select_related('statement')
+
+        re_evaluate_tx_qs = Transaction.objects.filter(
+            statement__declaration_id=self.declaration_id,
+            unmatched_record__status__in=['PENDING_REVIEW', 'NEW_RULE_PROPOSED'],
+            is_expense=False
+        ).select_related('statement', 'unmatched_record')
+        # --- END MODIFIED ---
+
         transactions_for_analysis = list(new_transactions_qs) + list(re_evaluate_tx_qs)
         transactions_for_analysis = list({tx.pk: tx for tx in transactions_for_analysis}.values())
-        print(f"   -> Found {len(transactions_for_analysis)} transactions to analyze.")
+        print(f"   -> Found {len(transactions_for_analysis)} income transactions to analyze.")
 
         transactions_to_update = []; unmatched_records_to_clear = []; newly_unmatched_transactions = []
         matched_count = 0
@@ -205,8 +219,20 @@ class RulesEngine:
         print(f"--- Running Analysis (New & Pending Only) for Declaration ID: {self.declaration_id} ---")
         print(f"   -> Using {len(self.rules)} active rules.")
 
-        new_transactions_qs = Transaction.objects.filter(statement__declaration_id=self.declaration_id, declaration_point__isnull=True).select_related('statement')
-        pending_review_tx_qs = Transaction.objects.filter(statement__declaration_id=self.declaration_id, unmatched_record__status='PENDING_REVIEW').select_related('statement', 'unmatched_record')
+        # --- MODIFIED: Added is_expense=False ---
+        new_transactions_qs = Transaction.objects.filter(
+            statement__declaration_id=self.declaration_id,
+            declaration_point__isnull=True,
+            is_expense=False
+        ).select_related('statement')
+
+        pending_review_tx_qs = Transaction.objects.filter(
+            statement__declaration_id=self.declaration_id,
+            unmatched_record__status='PENDING_REVIEW',
+            is_expense=False
+        ).select_related('statement', 'unmatched_record')
+        # --- END MODIFIED ---
+
         transactions_for_analysis = list(new_transactions_qs) + list(pending_review_tx_qs)
         transactions_for_analysis = list({tx.pk: tx for tx in transactions_for_analysis}.values())
         print(f"   -> Found {len(transactions_for_analysis)} transactions for New/Pending analysis.")
@@ -216,6 +242,7 @@ class RulesEngine:
         for tx in transactions_for_analysis:
             is_matched = False
             is_pending = hasattr(tx, 'unmatched_record')
+
             for rule in self.rules:
                 if self._check_rule(tx, rule):
                     tx.matched_rule = rule; tx.declaration_point = rule.declaration_point
@@ -229,9 +256,11 @@ class RulesEngine:
                 if tx.matched_rule is not None or tx.declaration_point is not None:
                      tx.matched_rule = None; tx.declaration_point = None
                      if tx not in transactions_to_update: transactions_to_update.append(tx)
+
         if transactions_to_update:
             updated_count = Transaction.objects.bulk_update(transactions_to_update, ['matched_rule', 'declaration_point'])
             print(f"   -> Updated {updated_count} transactions in database.")
+
         cleared_unmatched_count = 0
         if unmatched_records_to_clear:
              for um in unmatched_records_to_clear:
@@ -239,11 +268,13 @@ class RulesEngine:
              UnmatchedTransaction.objects.bulk_update(unmatched_records_to_clear, ['status', 'resolution_date'])
              cleared_unmatched_count = len(unmatched_records_to_clear)
              print(f"   -> Marked {len(unmatched_records_to_clear)} previously PENDING items as RESOLVED.")
+
         new_unmatched_count = 0
         if newly_unmatched_transactions:
             unmatched_queue_objects = [UnmatchedTransaction(transaction=tx, assigned_user=assigned_user, status='PENDING_REVIEW') for tx in newly_unmatched_transactions]
             created_unmatched = UnmatchedTransaction.objects.bulk_create(unmatched_queue_objects)
             new_unmatched_count = len(created_unmatched)
             print(f"   -> Created {new_unmatched_count} new items in the unmatched queue.")
+
         print(f"--- Analysis (New & Pending) Complete. Matched: {matched_count}, Newly Unmatched: {new_unmatched_count}, Cleared from Queue: {cleared_unmatched_count} ---")
         return matched_count, new_unmatched_count, cleared_unmatched_count

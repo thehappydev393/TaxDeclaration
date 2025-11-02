@@ -28,12 +28,7 @@ class TransactionScopeRulesEngine:
 
         print(f"   [TxScope Engine Init] Loaded {len(self.rules)} active rules for Decl ID {self.declaration_id}.")
 
-    # --- NEW: Helper to get field values dynamically ---
     def _get_dynamic_value(self, transaction: Transaction, field_name: str):
-        """
-        Safely gets a value from a transaction, following relationships.
-        e.g., 'description' or 'statement__declaration__first_name'
-        """
         try:
             if '__' in field_name:
                 related_parts = field_name.split('__')
@@ -46,15 +41,11 @@ class TransactionScopeRulesEngine:
                 return getattr(transaction, field_name, None)
         except AttributeError:
             return None
-    # --- END NEW ---
 
-    # --- UPDATED: _evaluate_condition method ---
     def _evaluate_condition(self, transaction: Transaction, condition: dict) -> bool:
-        """Evaluates a single condition against a transaction field."""
-
         field = condition.get('field')
         condition_type = condition.get('type')
-        value = condition.get('value') # This now holds static text OR a field name
+        value = condition.get('value')
 
         DYNAMIC_CONDITION_TYPES = [
             'CONTAINS_FIELD_VALUE',
@@ -66,35 +57,26 @@ class TransactionScopeRulesEngine:
              print(f"   [TxScope Engine Warn] Malformed condition skipped: {condition}")
              return False
 
-        # Get the "left side" value (e.g., tx.description)
         field_value_raw = self._get_dynamic_value(transaction, field)
         if field_value_raw is None:
-            return False # Can't compare None
+            return False
 
         str_field_value = str(field_value_raw)
 
         try:
-            # --- NEW: Dynamic Field-to-Field Comparison ---
             if condition_type in DYNAMIC_CONDITION_TYPES:
-                # 'value' is the name of the *other* field (e.g., "statement__declaration__first_name")
                 value_from_field_raw = self._get_dynamic_value(transaction, value)
-
                 if value_from_field_raw is None:
-                    return False # Can't compare against None
-
+                    return False
                 str_value_from_field = str(value_from_field_raw)
-
                 if condition_type == 'CONTAINS_FIELD_VALUE':
                     return str_value_from_field.lower() in str_field_value.lower()
                 elif condition_type == 'NOT_CONTAINS_FIELD_VALUE':
                     return str_value_from_field.lower() not in str_field_value.lower()
                 elif condition_type == 'EQUALS_FIELD_VALUE':
                     return str_field_value.strip().lower() == str_value_from_field.strip().lower()
-
-            # --- EXISTING: Static Value Comparison ---
             else:
                 str_value_lower = str(value).lower()
-
                 if condition_type == 'CONTAINS_KEYWORD':
                     keywords = [kw.strip() for kw in str_value_lower.split(',') if kw.strip()]; return any(kw in str_field_value.lower() for kw in keywords)
                 elif condition_type == 'DOES_NOT_CONTAIN_KEYWORD':
@@ -119,10 +101,8 @@ class TransactionScopeRulesEngine:
                      print(f"   [TxScope Engine Warn] Numeric comparison '{condition_type}' on non-amount field '{field}'. Skipped: {condition}"); return False
                 else:
                     print(f"   [TxScope Engine Warn] Unrecognized condition type '{condition_type}': {condition}"); return False
-
         except Exception as e:
             print(f"   [TxScope Engine Error] Unexpected error evaluating condition: {condition}. Error: {e}"); traceback.print_exc(); return False
-    # --- END UPDATED ---
 
 
     def _check_rule(self, transaction: Transaction, rule: TransactionScopeRule) -> bool:
@@ -144,16 +124,21 @@ class TransactionScopeRulesEngine:
         print(f"--- Running TxScope Analysis for Declaration ID: {self.declaration_id} ---")
 
         if run_all:
-            transactions_qs = Transaction.objects.filter(
-                statement__declaration_id=self.declaration_id
-            ).select_related('statement')
-            print("   -> Mode: Re-evaluating ALL transactions.")
-        else:
+            # --- MODIFIED: Added is_expense=False ---
             transactions_qs = Transaction.objects.filter(
                 statement__declaration_id=self.declaration_id,
-                transaction_scope='UNDETERMINED'
+                is_expense=False
             ).select_related('statement')
-            print("   -> Mode: Evaluating only 'UNDETERMINED' transactions.")
+            print("   -> Mode: Re-evaluating ALL income transactions.")
+        else:
+            # --- MODIFIED: Added is_expense=False ---
+            transactions_qs = Transaction.objects.filter(
+                statement__declaration_id=self.declaration_id,
+                transaction_scope='UNDETERMINED',
+                is_expense=False
+            ).select_related('statement')
+            print("   -> Mode: Evaluating only 'UNDETERMINED' income transactions.")
+        # --- END MODIFIED ---
 
         transactions_for_analysis = list(transactions_qs)
         print(f"   -> Found {len(transactions_for_analysis)} transactions to analyze.")

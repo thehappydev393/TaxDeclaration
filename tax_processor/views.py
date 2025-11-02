@@ -137,15 +137,33 @@ def add_statements_to_declaration(request, declaration_id):
     context = {'form': form, 'declaration': declaration, 'is_admin': is_superadmin(request.user)}
     return render(request, 'tax_processor/add_statements_form.html', context)
 
+
 def filter_declarations_by_user(user):
     if is_superadmin(user): return Declaration.objects.all()
     else: return Declaration.objects.filter(created_by=user)
 
 @user_passes_test(is_permitted_user)
 def declaration_detail(request, declaration_id):
-    declaration_qs = filter_declarations_by_user(request.user); declaration = get_object_or_404(declaration_qs, pk=declaration_id)
-    total_statements = declaration.statements.count(); total_transactions = Transaction.objects.filter(statement__declaration=declaration).count(); unassigned_transactions = Transaction.objects.filter(statement__declaration=declaration, declaration_point__isnull=True).count()
-    context = {'declaration': declaration, 'total_statements': total_statements, 'total_transactions': total_transactions, 'unassigned_transactions': unassigned_transactions, 'is_admin': is_superadmin(request.user)}
+    declaration_qs = filter_declarations_by_user(request.user)
+    declaration = get_object_or_404(declaration_qs, pk=declaration_id)
+    total_statements = declaration.statements.count()
+    total_transactions = Transaction.objects.filter(statement__declaration=declaration).count()
+
+    # --- MODIFIED: Added is_expense=False ---
+    unassigned_transactions = Transaction.objects.filter(
+        statement__declaration=declaration,
+        declaration_point__isnull=True,
+        is_expense=False  # Only count unassigned INCOME
+    ).count()
+    # --- END MODIFIED ---
+
+    context = {
+        'declaration': declaration,
+        'total_statements': total_statements,
+        'total_transactions': total_transactions,
+        'unassigned_transactions': unassigned_transactions, # This count is now accurate
+        'is_admin': is_superadmin(request.user)
+    }
     return render(request, 'tax_processor/declaration_detail.html', context)
 
 
@@ -162,14 +180,17 @@ def run_declaration_analysis(request, declaration_id):
         entity_engine = EntityTypeRulesEngine(declaration_id=declaration.pk)
         entity_matched = entity_engine.run_analysis(run_all=True)
         messages.success(request, f"Entity Type Engine: Matched {entity_matched} transactions.")
+
         messages.info(request, "Running Transaction Scope analysis...")
         scope_engine = TransactionScopeRulesEngine(declaration_id=declaration.pk)
         scope_matched = scope_engine.run_analysis(run_all=True)
         messages.success(request, f"Transaction Scope Engine: Matched {scope_matched} transactions.")
+
         messages.info(request, "Running Main Category analysis...")
         engine = RulesEngine(declaration_id=declaration.pk)
         matched, new_unmatched, cleared_unmatched = engine.run_analysis(assigned_user=assigned_user)
         messages.success(request, f"Analysis complete for '{declaration.name}'.")
+
         total_processed = matched + new_unmatched + cleared_unmatched
         messages.info(request, f"Total main category transactions processed: {total_processed}")
         messages.info(request, f"Matched {matched} new/re-evaluated categories. Cleared {cleared_unmatched} existing review items.")
@@ -198,14 +219,17 @@ def run_analysis_pending(request, declaration_id):
         entity_engine = EntityTypeRulesEngine(declaration_id=declaration.pk)
         entity_matched = entity_engine.run_analysis(run_all=False)
         messages.success(request, f"Entity Type Engine: Matched {entity_matched} transactions.")
+
         messages.info(request, "Running Transaction Scope analysis (Pending)...")
         scope_engine = TransactionScopeRulesEngine(declaration_id=declaration.pk)
         scope_matched = scope_engine.run_analysis(run_all=False)
         messages.success(request, f"Transaction Scope Engine: Matched {scope_matched} transactions.")
+
         messages.info(request, "Running Main Category analysis (New & Pending)...")
         engine = RulesEngine(declaration_id=declaration.pk)
         matched, new_unmatched, cleared_unmatched = engine.run_analysis_pending_only(assigned_user=assigned_user)
         messages.success(request, f"Վերլուծություն (Նոր և Սպասվող) ավարտվեց «{declaration.name}»-ի համար։")
+
         total_processed = matched + new_unmatched
         messages.info(request, f"Ընդհանուր մշակված գործարքներ՝ {total_processed}")
         messages.info(request, f"Համընկել է {matched} նոր/սպասվող գործարք։")
@@ -437,7 +461,7 @@ def declaration_rule_list(request, declaration_id):
         'filter_active': filter_active, 'filter_proposal': filter_proposal,
         'current_sort': sort_by, 'get_params': get_params.urlencode()
     }
-    return render(request, 'tax_processor/rule_list.html', context)
+    return render(request, 'tax_processor/declaration_rule_list.html', context)
 
 
 # -----------------------------------------------------------
@@ -503,11 +527,22 @@ def reject_global_proposal(request, rule_id):
 def user_dashboard(request):
     user = request.user
     queryset = filter_declarations_by_user(user)
+
+    # --- MODIFIED: Added is_expense=False to unmatched_count ---
     queryset = queryset.annotate(
         statement_count=Count('statements', distinct=True),
         total_transactions=Count('statements__transactions', distinct=True),
-        unmatched_count=Count('statements__transactions__unmatched_record', filter=Q(statements__transactions__unmatched_record__status='PENDING_REVIEW'), distinct=True)
+        unmatched_count=Count(
+            'statements__transactions__unmatched_record',
+            filter=Q(
+                statements__transactions__unmatched_record__status='PENDING_REVIEW',
+                statements__transactions__is_expense=False # Only count INCOME
+            ),
+            distinct=True
+        )
     )
+    # --- END MODIFIED ---
+
     search_query = request.GET.get('q', '').strip()
     if search_query:
         queryset = queryset.filter(
@@ -546,6 +581,9 @@ def user_dashboard(request):
 @user_passes_test(is_permitted_user)
 def review_queue(request, declaration_id=None):
     user = request.user
+    # Base queryset *already* only selects income, since rules_engine
+    # (which creates UnmatchedTransaction) now ignores expenses.
+    # No change needed here.
     queryset = UnmatchedTransaction.objects.filter(status='PENDING_REVIEW')
     is_filtered_by_declaration = False
     title = ""
@@ -564,6 +602,8 @@ def review_queue(request, declaration_id=None):
     else:
         queryset = queryset.filter(assigned_user=user)
         title = f"{user.username}'s Pending Reviews"
+
+    # This query is fine, it's already implicitly income-only
     queryset = queryset.select_related(
         'transaction__statement__declaration',
         'transaction__matched_rule',
@@ -611,6 +651,13 @@ def review_queue(request, declaration_id=None):
 def resolve_transaction(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
     tx = unmatched_item.transaction
+
+    # --- NEW: Check if it's an expense ---
+    if tx.is_expense:
+        messages.error(request, "Expenses cannot be resolved.")
+        return redirect('all_transactions_list', declaration_id=tx.statement.declaration.id)
+    # --- END NEW ---
+
     declaration = tx.statement.declaration
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "Դուք իրավասու չեք լուծելու այս գործարքը։")
@@ -744,10 +791,16 @@ def resolve_transaction(request, unmatched_id):
 def tax_report(request, declaration_id):
     declaration_qs = filter_declarations_by_user(request.user)
     declaration = get_object_or_404(declaration_qs, pk=declaration_id)
+
+    # --- MODIFIED: Added is_expense=False ---
+    # We only report on INCOME transactions.
     transactions_qs = Transaction.objects.filter(
         statement__declaration=declaration,
-        declaration_point__isnull=False
+        declaration_point__isnull=False,
+        is_expense=False
     ).select_related('declaration_point')
+    # --- END MODIFIED ---
+
     unique_dates = transactions_qs.exclude(currency='AMD').values_list('transaction_date__date', flat=True).distinct()
     unique_currencies = transactions_qs.exclude(currency='AMD').values_list('currency', flat=True).distinct()
     rates_qs = ExchangeRate.objects.filter(
@@ -974,11 +1027,29 @@ def all_transactions_list(request, declaration_id):
         if filter_status == 'ASSIGNED':
             queryset = queryset.filter(declaration_point__isnull=False)
         elif filter_status == 'PENDING':
-            queryset = queryset.filter(Q(declaration_point__isnull=True) & Q(unmatched_record__status='PENDING_REVIEW'))
+            # --- MODIFIED: Added is_expense=False ---
+            queryset = queryset.filter(
+                Q(declaration_point__isnull=True) &
+                Q(unmatched_record__status='PENDING_REVIEW') &
+                Q(is_expense=False)
+            )
+            # --- END MODIFIED ---
         elif filter_status == 'PROPOSED':
-            queryset = queryset.filter(unmatched_record__status='NEW_RULE_PROPOSED')
+            # --- MODIFIED: Added is_expense=False ---
+            queryset = queryset.filter(
+                Q(unmatched_record__status='NEW_RULE_PROPOSED') &
+                Q(is_expense=False)
+            )
+            # --- END MODIFIED ---
         elif filter_status == 'UNPROCESSED':
-             queryset = queryset.filter(declaration_point__isnull=True, unmatched_record__isnull=True)
+             # --- MODIFIED: Added is_expense=False ---
+             queryset = queryset.filter(
+                Q(declaration_point__isnull=True) &
+                Q(unmatched_record__isnull=True) &
+                Q(is_expense=False)
+            )
+            # --- END MODIFIED ---
+
     sort_by = request.GET.get('sort', '-transaction_date')
     valid_sort_fields = [
         'transaction_date', '-transaction_date', 'amount', '-amount', 'currency', '-currency',
@@ -1009,6 +1080,13 @@ def edit_transaction(request, transaction_id):
         'statement__declaration', 'declaration_point', 'matched_rule', 'unmatched_record'
     ), pk=transaction_id)
     declaration = transaction_obj.statement.declaration
+
+    # --- NEW: Check if it's an expense ---
+    if transaction_obj.is_expense:
+        messages.error(request, "Expenses cannot be edited or resolved.")
+        return redirect('all_transactions_list', declaration_id=declaration.pk)
+    # --- END NEW ---
+
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "Դուք իրավասու չեք խմբագրելու այս գործարքը։")
         return redirect('user_dashboard')

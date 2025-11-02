@@ -141,11 +141,14 @@ def generate_analysis_hints(declaration_id: int):
     # 1. Clear all old hints for this declaration
     AnalysisHint.objects.filter(declaration=declaration).delete()
 
-    # 2. Get all unmatched transactions
+    # 2. Get all unmatched income transactions
+    # --- MODIFIED: Added is_expense=False ---
     unmatched_txs = Transaction.objects.filter(
         statement__declaration=declaration,
-        declaration_point__isnull=True
+        declaration_point__isnull=True,
+        is_expense=False
     ).values('id', 'description', 'sender', 'amount', 'currency')
+    # --- END MODIFIED ---
 
     if not unmatched_txs:
         print("   -> No unmatched transactions found. No hints to generate.")

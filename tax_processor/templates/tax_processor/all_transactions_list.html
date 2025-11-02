@@ -47,6 +47,7 @@
         /* Action Links */
         .action-links a { color: #007bff; text-decoration: none; margin-right: 8px; font-size: 0.9em; }
         .action-links a:hover { text-decoration: underline; }
+        .action-links span { color: #6c757d; font-style: italic; } /* Style for (Ելք) */
 
         .footer-nav { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
         .footer-nav a { color: #007bff; text-decoration: none; margin-right: 15px; }
@@ -193,17 +194,22 @@
                 {% else %}
                 <span class="status-pending">{{ tx.unmatched_record.get_status_display }}</span>
                 {% endif %}
+                {% elif not tx.is_expense %} {# Only show 'Unprocessed' for income #}
+                <span class="status-unprocessed">Սպասում է Վերլուծության</span> {# Pending Analysis #}
                 {% else %}
-                <span class="status-unprocessed">Սպասում է Վերլուծության</span> {# Pending Analysis (No unmatched record yet) #}
+                (Ելք) {# (Expense) #}
                 {% endif %}
             </td>
+
             <td class="action-links" nowrap>
-                {# --- UPDATED EDIT LINK --- #}
+                {% if not tx.is_expense %}
                 <a href="{% url 'edit_transaction' tx.id %}" target="_blank">Խմբագրել</a> {# Edit #}
-                {# --- END EDIT LINK --- #}
 
                 {% if not tx.declaration_point and tx.unmatched_record %}
                 | <a href="{% url 'resolve_transaction' tx.unmatched_record.pk %}" target="_blank" style="color: #ff8c00;">Լուծել</a> {# Resolve #}
+                {% endif %}
+                {% else %}
+                <span>(Ելք)</span>
                 {% endif %}
             </td>
         </tr>
