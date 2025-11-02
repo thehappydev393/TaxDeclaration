@@ -17,7 +17,7 @@ from .entity_type_rules_engine import EntityTypeRulesEngine
 from .transaction_scope_rules_engine import TransactionScopeRulesEngine
 from .models import (
     Declaration, Transaction, TaxRule, UnmatchedTransaction, UserProfile, DeclarationPoint,
-    EntityTypeRule, TransactionScopeRule, ExchangeRate # IMPORT ExchangeRate
+    EntityTypeRule, TransactionScopeRule, ExchangeRate
 )
 from .parser_logic import BANK_KEYWORDS
 from datetime import date
@@ -27,10 +27,8 @@ from django.db import transaction as db_transaction
 from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-# --- NEW: Import for collections ---
 from collections import defaultdict
 from decimal import Decimal
-# --- END NEW ---
 
 BANK_NAMES_LIST = sorted(list(BANK_KEYWORDS.keys()))
 
@@ -46,6 +44,7 @@ def is_permitted_user(user):
 # -----------------------------------------------------------
 # 2. DATA INGESTION & DECLARATION MGMT
 # -----------------------------------------------------------
+# ... (upload_statement, add_statements_to_declaration, filter_declarations_by_user, declaration_detail, run_declaration_analysis, run_analysis_pending... no changes) ...
 @user_passes_test(is_permitted_user)
 def upload_statement(request):
     if request.method == 'POST':
@@ -137,7 +136,6 @@ def add_statements_to_declaration(request, declaration_id):
     context = {'form': form, 'declaration': declaration, 'is_admin': is_superadmin(request.user)}
     return render(request, 'tax_processor/add_statements_form.html', context)
 
-
 def filter_declarations_by_user(user):
     if is_superadmin(user): return Declaration.objects.all()
     else: return Declaration.objects.filter(created_by=user)
@@ -148,7 +146,6 @@ def declaration_detail(request, declaration_id):
     total_statements = declaration.statements.count(); total_transactions = Transaction.objects.filter(statement__declaration=declaration).count(); unassigned_transactions = Transaction.objects.filter(statement__declaration=declaration, declaration_point__isnull=True).count()
     context = {'declaration': declaration, 'total_statements': total_statements, 'total_transactions': total_transactions, 'unassigned_transactions': unassigned_transactions, 'is_admin': is_superadmin(request.user)}
     return render(request, 'tax_processor/declaration_detail.html', context)
-
 
 @user_passes_test(is_permitted_user)
 @require_POST
@@ -253,6 +250,7 @@ def rule_list_global(request):
     return render(request, 'tax_processor/rule_list.html', context)
 
 
+# --- UPDATED: rule_create_or_update view ---
 @user_passes_test(is_superadmin)
 def rule_create_or_update(request, rule_id=None, declaration_id=None):
     is_specific_rule = declaration_id is not None
@@ -282,10 +280,13 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
             title = "Create New Global Tax Rule"
         list_url_name = 'rule_list_global'
         url_kwargs = {}
+
     formset_prefix = 'conditions'
+
     if request.method == 'POST':
         form = TaxRuleForm(request.POST, instance=rule)
         formset = BaseConditionFormSet(request.POST, prefix=formset_prefix)
+
         if form.is_valid() and formset.is_valid():
             new_rule = form.save(commit=False)
             if not new_rule.pk: new_rule.created_by = request.user
@@ -293,10 +294,33 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
                 new_rule.declaration = declaration
             else:
                  new_rule.declaration = None
+
+            # --- NEW: Logic to save dynamic field value ---
             checks = []
             for check_form in formset.cleaned_data:
-                if check_form and not check_form.get('DELETE'): checks.append({'field': check_form['field'], 'type': check_form['condition_type'], 'value': check_form['value']})
+                if check_form and not check_form.get('DELETE'):
+                    condition_type = check_form['condition_type']
+                    value_to_save = None
+
+                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                        value_to_save = check_form.get('value_field')
+                    elif check_form['field'] == 'statement__bank_name':
+                         # This assumes the bank value is coming from the 'value_bank' field
+                         # Note: The JS swaps names, so 'value' *should* be correct, but this is a failsafe.
+                         # The JS implementation is the primary driver. We'll just read from 'value'.
+                         value_to_save = check_form.get('value')
+                    else:
+                        value_to_save = check_form.get('value')
+
+                    checks.append({
+                        'field': check_form['field'],
+                        'type': condition_type,
+                        'value': value_to_save
+                    })
+            # --- END NEW ---
+
             new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+
             if rule and rule.proposal_status == 'PENDING_GLOBAL' and not is_superadmin(request.user):
                  new_rule.proposal_status = 'NONE'
                  messages.info(request, "Rule edited, global proposal status reset.")
@@ -306,21 +330,36 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
                  return redirect(list_url_name, **url_kwargs)
             except IntegrityError:
                  messages.error(request, f"A rule named '{new_rule.rule_name}' already exists for this scope (global or specific declaration). Please choose a different name.")
-                 context = {
-                     'form': form, 'formset': formset, 'title': title, 'rule': rule, 'declaration': declaration,
-                     'is_specific_rule': is_specific_rule, 'list_url_name': list_url_name, 'url_kwargs': url_kwargs,
-                     'is_admin': is_superadmin(request.user), 'bank_names': BANK_NAMES_LIST
-                 }
-                 return render(request, 'tax_processor/rule_form.html', context)
-    else:
+                 # Fall through to re-render context
+
+    else: # GET request
         initial_form_data = {}; initial_formset_data = []
         if rule:
             if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
                 logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
-                for check in logic_block.get('checks', []): initial_formset_data.append({'field': check.get('field'), 'condition_type': check.get('type'), 'value': check.get('value')})
-        else: initial_form_data['logic'] = 'AND'
+                for check in logic_block.get('checks', []):
+                    # --- NEW: Pre-populate correct value field ---
+                    condition_type = check.get('type')
+                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                        initial_formset_data.append({
+                            'field': check.get('field'),
+                            'condition_type': condition_type,
+                            'value_field': check.get('value') # Value from JSON goes into value_field
+                        })
+                    else:
+                        initial_formset_data.append({
+                            'field': check.get('field'),
+                            'condition_type': condition_type,
+                            'value': check.get('value') # Value from JSON goes into standard value
+                        })
+                    # --- END NEW ---
+        else:
+            initial_form_data['logic'] = 'AND'
+
         form = TaxRuleForm(instance=rule, initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
+
+    # This context is used for both GET and POST-failure
     context = {
         'form': form, 'formset': formset, 'title': title, 'rule': rule,
         'declaration': declaration,
@@ -331,6 +370,7 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/rule_form.html', context)
+# --- END UPDATED ---
 
 
 @user_passes_test(is_permitted_user)
@@ -630,7 +670,25 @@ def resolve_transaction(request, unmatched_id):
                                 new_rule.created_by = request.user
                                 new_rule.declaration = declaration
                                 new_rule.proposal_status = 'NONE'
-                                checks = [{'field': f['field'], 'type': f['condition_type'], 'value': f['value']} for f in condition_formset.cleaned_data if f and not f.get('DELETE')]
+
+                                # --- UPDATED: Logic to save dynamic field value ---
+                                checks = []
+                                for check_form in condition_formset.cleaned_data:
+                                    if check_form and not check_form.get('DELETE'):
+                                        condition_type = check_form['condition_type']
+                                        value_to_save = None
+                                        if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                            value_to_save = check_form.get('value_field')
+                                        else:
+                                            value_to_save = check_form.get('value')
+
+                                        checks.append({
+                                            'field': check_form['field'],
+                                            'type': condition_type,
+                                            'value': value_to_save
+                                        })
+                                # --- END UPDATED ---
+
                                 new_rule.conditions_json = [{'logic': final_rule_form.cleaned_data['logic'], 'checks': checks}]
                                 new_rule.save()
                                 tx.matched_rule = new_rule
@@ -663,6 +721,17 @@ def resolve_transaction(request, unmatched_id):
                  traceback.print_exc()
         else:
              messages.error(request, "Խնդրում ենք ուղղել լուծման ձևի սխալները։")
+
+    # --- UPDATED: Pre-populate formset for GET ---
+    initial_form_data = {}; initial_formset_data = []
+    # (This part was in the GET block, but it's needed for POST failure re-render too)
+    if request.method != 'POST': # Only do this on GET
+        initial_form_data = {'rule_name': f"Rule based on: {tx.description[:50]}...", 'priority': 50, 'is_active': True, 'logic': 'AND'}
+        initial_condition_data = [{'field': 'description', 'condition_type': 'CONTAINS_KEYWORD', 'value': tx.description[:200]}]
+        rule_form = TaxRuleForm(initial=initial_form_data, prefix=rule_form_prefix)
+        condition_formset = BaseConditionFormSet(initial=initial_condition_data, prefix=condition_formset_prefix)
+    # --- END UPDATED ---
+
     context = {
         'unmatched_item': unmatched_item,
         'transaction': tx,
@@ -673,37 +742,27 @@ def resolve_transaction(request, unmatched_id):
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/resolve_transaction.html', context)
+# --- END UPDATED VIEW ---
 
 
-# --- UPDATED: tax_report view ---
 @user_passes_test(is_permitted_user)
 def tax_report(request, declaration_id):
     declaration_qs = filter_declarations_by_user(request.user)
     declaration = get_object_or_404(declaration_qs, pk=declaration_id)
-
-    # 1. Get all categorized transactions
     transactions_qs = Transaction.objects.filter(
         statement__declaration=declaration,
         declaration_point__isnull=False
     ).select_related('declaration_point')
-
-    # 2. Get all unique dates and currencies for exchange rate lookup
     unique_dates = transactions_qs.exclude(currency='AMD').values_list('transaction_date__date', flat=True).distinct()
     unique_currencies = transactions_qs.exclude(currency='AMD').values_list('currency', flat=True).distinct()
-
-    # 3. Fetch all required exchange rates in one query
     rates_qs = ExchangeRate.objects.filter(
         date__in=unique_dates,
         currency_code__in=unique_currencies
     )
-
-    # Build a fast lookup dictionary: {(date, 'USD'): 404.5}
     rates_dict = {
         (rate.date, rate.currency_code): rate.rate
         for rate in rates_qs
     }
-
-    # 4. Process transactions
     reportable_groups = defaultdict(lambda: defaultdict(lambda: {'total_amd': Decimal(0), 'total_original': Decimal(0), 'count': 0}))
     non_reportable_groups = defaultdict(lambda: defaultdict(lambda: {'total_amd': Decimal(0), 'total_original': Decimal(0), 'count': 0}))
     currency_totals = defaultdict(lambda: Decimal(0))
@@ -722,7 +781,6 @@ def tax_report(request, declaration_id):
         if currency != 'AMD':
             rate = rates_dict.get((tx_date, currency))
             if rate is None:
-                # Rate not found for this date, try to find the closest previous one
                 closest_rate = ExchangeRate.objects.filter(
                     currency_code=currency,
                     date__lt=tx_date
@@ -730,50 +788,43 @@ def tax_report(request, declaration_id):
 
                 if closest_rate:
                     rate = closest_rate.rate
-                    rates_dict[(tx_date, currency)] = rate # Cache it for this run
+                    rates_dict[(tx_date, currency)] = rate
                 else:
                     missing_rates.add(f"{tx_date} ({currency})")
                     rate = Decimal(1.0) # Failsafe
 
             amd_equivalent = amount * rate
 
-        # Get the group this tx belongs to
         point = tx.declaration_point
         point_key = point.id
 
-        # Decide which master group to add to
         if point.is_income: # This is the "Reportable" flag
             group = reportable_groups
         else:
             group = non_reportable_groups
 
-        # Aggregate data
-        # We group by DeclarationPoint ID, then by currency
         group_data = group[point_key][currency]
         group_data['total_amd'] += amd_equivalent
         group_data['total_original'] += amount
         group_data['count'] += 1
-        # Store point info once, including the new is_auto_filled flag
         group[point_key]['point_info'] = {
             'name': point.name,
             'description': point.description,
             'is_auto_filled': point.is_auto_filled
         }
 
-
     if missing_rates:
         messages.warning(request, f"Could not find exchange rates for the following dates/currencies: {', '.join(missing_rates)}. Used last available rate or 1.0 as fallback.")
 
-    # 5. Format data for template
     def format_group_data(group_dict):
         final_list = []
         for point_id, currencies in group_dict.items():
-            point_info = currencies.pop('point_info') # Get the point object
+            point_info = currencies.pop('point_info')
             for currency, data in currencies.items():
                 final_list.append({
                     'point_name': point_info['name'],
                     'point_description': point_info['description'],
-                    'is_auto_filled': point_info['is_auto_filled'], # Pass flag to template
+                    'is_auto_filled': point_info['is_auto_filled'],
                     'currency': currency,
                     'transaction_count': data['count'],
                     'total_amount_amd': data['total_amd'],
@@ -784,7 +835,6 @@ def tax_report(request, declaration_id):
     reportable_items = format_group_data(reportable_groups)
     non_reportable_items = format_group_data(non_reportable_groups)
 
-    # Format currency totals for template
     final_currency_totals = [
         {'currency': code, 'total_amount': total}
         for code, total in sorted(currency_totals.items())
@@ -798,7 +848,6 @@ def tax_report(request, declaration_id):
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/tax_report.html', context)
-# --- END UPDATED VIEW ---
 
 
 # -----------------------------------------------------------
@@ -815,6 +864,7 @@ def review_proposals(request):
     return render(request, 'tax_processor/review_proposals.html', context)
 
 
+# --- UPDATED: finalize_rule view ---
 @user_passes_test(is_superadmin)
 def finalize_rule(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id); transaction = unmatched_item.transaction
@@ -887,6 +937,7 @@ def finalize_rule(request, unmatched_id):
             'bank_names': BANK_NAMES_LIST # <-- ADDED
         }
         return render(request, 'tax_processor/finalize_rule.html', context)
+# --- END UPDATED VIEW ---
 
 
 @require_POST
@@ -1063,6 +1114,7 @@ def entity_rule_list(request, declaration_id=None):
     }
     return render(request, 'tax_processor/entity_rule_list.html', context)
 
+# --- UPDATED: entity_rule_create_or_update view ---
 @user_passes_test(is_superadmin)
 def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
     is_specific_rule = declaration_id is not None
@@ -1096,6 +1148,7 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
     if request.method == 'POST':
         form = EntityTypeRuleForm(request.POST, instance=rule)
         formset = BaseConditionFormSet(request.POST, prefix=formset_prefix)
+
         if form.is_valid() and formset.is_valid():
             new_rule = form.save(commit=False)
             if not new_rule.pk: new_rule.created_by = request.user
@@ -1103,10 +1156,28 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
                 new_rule.declaration = declaration
             else:
                  new_rule.declaration = None
+
+            # --- NEW: Logic to save dynamic field value ---
             checks = []
             for check_form in formset.cleaned_data:
-                if check_form and not check_form.get('DELETE'): checks.append({'field': check_form['field'], 'type': check_form['condition_type'], 'value': check_form['value']})
+                if check_form and not check_form.get('DELETE'):
+                    condition_type = check_form['condition_type']
+                    value_to_save = None
+
+                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                        value_to_save = check_form.get('value_field')
+                    else:
+                        value_to_save = check_form.get('value')
+
+                    checks.append({
+                        'field': check_form['field'],
+                        'type': condition_type,
+                        'value': value_to_save
+                    })
+            # --- END NEW ---
+
             new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+
             try:
                  new_rule.save()
                  messages.success(request, f"Entity Rule '{new_rule.rule_name}' saved successfully.")
@@ -1119,8 +1190,24 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
         if rule:
             if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
                 logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
-                for check in logic_block.get('checks', []): initial_formset_data.append({'field': check.get('field'), 'condition_type': check.get('type'), 'value': check.get('value')})
-        else: initial_form_data['logic'] = 'AND'
+                for check in logic_block.get('checks', []):
+                    # --- NEW: Pre-populate correct value field ---
+                    condition_type = check.get('type')
+                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                        initial_formset_data.append({
+                            'field': check.get('field'),
+                            'condition_type': condition_type,
+                            'value_field': check.get('value')
+                        })
+                    else:
+                        initial_formset_data.append({
+                            'field': check.get('field'),
+                            'condition_type': condition_type,
+                            'value': check.get('value')
+                        })
+                    # --- END NEW ---
+        else:
+            initial_form_data['logic'] = 'AND'
         form = EntityTypeRuleForm(instance=rule, initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
 
@@ -1132,6 +1219,7 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'rule_type': 'entity'
     }
     return render(request, 'tax_processor/rule_form.html', context)
+# --- END UPDATED ---
 
 @user_passes_test(is_permitted_user)
 @require_POST
@@ -1202,6 +1290,7 @@ def scope_rule_list(request, declaration_id=None):
     }
     return render(request, 'tax_processor/scope_rule_list.html', context)
 
+# --- UPDATED: scope_rule_create_or_update view ---
 @user_passes_test(is_superadmin)
 def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
     is_specific_rule = declaration_id is not None
@@ -1241,10 +1330,28 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
                 new_rule.declaration = declaration
             else:
                  new_rule.declaration = None
+
+            # --- NEW: Logic to save dynamic field value ---
             checks = []
             for check_form in formset.cleaned_data:
-                if check_form and not check_form.get('DELETE'): checks.append({'field': check_form['field'], 'type': check_form['condition_type'], 'value': check_form['value']})
+                if check_form and not check_form.get('DELETE'):
+                    condition_type = check_form['condition_type']
+                    value_to_save = None
+
+                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                        value_to_save = check_form.get('value_field')
+                    else:
+                        value_to_save = check_form.get('value')
+
+                    checks.append({
+                        'field': check_form['field'],
+                        'type': condition_type,
+                        'value': value_to_save
+                    })
+            # --- END NEW ---
+
             new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+
             try:
                  new_rule.save()
                  messages.success(request, f"Scope Rule '{new_rule.rule_name}' saved successfully.")
@@ -1257,8 +1364,24 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
         if rule:
             if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
                 logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
-                for check in logic_block.get('checks', []): initial_formset_data.append({'field': check.get('field'), 'condition_type': check.get('type'), 'value': check.get('value')})
-        else: initial_form_data['logic'] = 'AND'
+                for check in logic_block.get('checks', []):
+                    # --- NEW: Pre-populate correct value field ---
+                    condition_type = check.get('type')
+                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                        initial_formset_data.append({
+                            'field': check.get('field'),
+                            'condition_type': condition_type,
+                            'value_field': check.get('value')
+                        })
+                    else:
+                        initial_formset_data.append({
+                            'field': check.get('field'),
+                            'condition_type': condition_type,
+                            'value': check.get('value')
+                        })
+                    # --- END NEW ---
+        else:
+            initial_form_data['logic'] = 'AND'
         form = TransactionScopeRuleForm(instance=rule, initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
 
@@ -1270,6 +1393,7 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'rule_type': 'scope'
     }
     return render(request, 'tax_processor/rule_form.html', context)
+# --- END UPDATED ---
 
 @user_passes_test(is_permitted_user)
 @require_POST

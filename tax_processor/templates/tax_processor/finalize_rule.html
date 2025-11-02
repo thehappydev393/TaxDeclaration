@@ -98,8 +98,9 @@
         .condition-value-container .form-control {
             width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
         }
+        /* Hide the labels for the value widgets, the container label is enough */
         .condition-value-container label { display: none; }
-        .condition-value-container > div:first-child label { display: block; }
+        .condition-value-container > div:first-child label { display: block; } /* Show first label */
 
         .btn {
             padding: 10px 15px;
@@ -446,5 +447,3 @@
 
     });
 </script>
-</body>
-</html>
