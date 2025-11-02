@@ -108,7 +108,7 @@
                             {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                         </div>
                         <div class="condition-value-select-wrapper" style="display: none;">
-                            <label for="id_{{ form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <label for="id_{{ form.prefix }}-value_select_bank">Արժեք</label>
                             <select name="{{ form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ form.prefix }}-value_select_bank">
                                 <option value="">---------</option>
                                 {% for bank_name in bank_names %}
@@ -149,7 +149,7 @@
                             {{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}
                         </div>
                         <div class="condition-value-select-wrapper" style="display: none;">
-                            <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">Արժեք</label>
                             <select name="{{ formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ formset.empty_form.prefix }}-value_select_bank">
                                 <option value="">---------</option>
                                 {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
@@ -315,10 +315,14 @@
         });
 
         // --- Select2 Initialization ---
-        $('#{{ form.declaration_point.id_for_label }}').select2({
-            placeholder: "Ընտրեք կատեգորիա",
-            allowClear: true
-        });
+        // This targets the main rule form's declaration point (if it exists)
+        var declarationPointSelect = document.getElementById('{{ form.declaration_point.id_for_label }}');
+        if (declarationPointSelect) {
+            $(declarationPointSelect).select2({
+                placeholder: "Ընտրեք կատեգորիա",
+                allowClear: true
+            });
+        }
     });
 </script>
 </body>

@@ -93,14 +93,24 @@
             margin-bottom: 3px;
         }
 
-        /* NEW: Wrapper for value inputs */
+        /* Wrapper for value inputs */
         .condition-value-container { display: flex; flex-direction: column; }
         .condition-value-container .form-control {
             width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
         }
-        /* Hide the labels for the value widgets, the container label is enough */
-        .condition-value-container label { display: none; }
-        .condition-value-container > div:first-child label { display: block; } /* Show first label */
+        /* --- MODIFICATION: ---
+           Removed the CSS that was hiding labels.
+           The JS now handles showing/hiding the entire wrapper div,
+           so the labels will show/hide correctly with their inputs.
+        */
+        .condition-value-container label {
+            display: block;
+            font-size: 0.85em;
+            margin-bottom: 3px;
+            font-weight: 600;
+            color: #495057;
+        }
+
 
         .btn {
             padding: 10px 15px;
@@ -223,7 +233,7 @@
                             {% for error in form.value.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                         </div>
                         <div class="condition-value-select-wrapper" style="display: none;">
-                            <label for="id_{{ form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <label for="id_{{ form.prefix }}-value_select_bank">Արժեք</label>
                             <select name="{{ form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ form.prefix }}-value_select_bank">
                                 <option value="">---------</option>
                                 {% for bank_name in bank_names %}
@@ -260,7 +270,7 @@
                             {{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}
                         </div>
                         <div class="condition-value-select-wrapper" style="display: none;">
-                            <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">{% trans "Value" %}</label>
+                            <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">Արժեք</label>
                             <select name="{{ formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ formset.empty_form.prefix }}-value_select_bank">
                                 <option value="">---------</option>
                                 {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
@@ -447,3 +457,5 @@
 
     });
 </script>
+</body>
+</html>
