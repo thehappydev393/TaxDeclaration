@@ -273,7 +273,6 @@ def rule_list_global(request):
         sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
 
-    # --- NEW: Pagination Logic ---
     total_count = queryset.count()
     default_per_page = 25
     per_page = request.GET.get('per_page', default_per_page)
@@ -291,7 +290,6 @@ def rule_list_global(request):
         paginator = Paginator(queryset, per_page)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-    # --- END NEW ---
 
     get_params = request.GET.copy()
     if 'page' in get_params:
@@ -301,19 +299,22 @@ def rule_list_global(request):
         'rules': page_obj, 'page_obj': page_obj, 'is_global_list': True, 'list_title': "Գլոբալ Կանոններ",
         'is_admin': True, 'search_query': search_query, 'filter_active': filter_active,
         'filter_proposal': filter_proposal, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/rule_list.html', context)
 
 
-@user_passes_test(is_superadmin)
+# --- MODIFIED: Changed decorator ---
+@user_passes_test(is_permitted_user)
 def rule_create_or_update(request, rule_id=None, declaration_id=None):
+# --- END MODIFIED ---
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
     title = ""
     if is_specific_rule:
         declaration = get_object_or_404(Declaration, pk=declaration_id)
+        # This permission check is correct
         if not (is_superadmin(request.user) or declaration.created_by == request.user):
              messages.error(request, "You don't have permission to manage rules for this declaration.")
              return redirect('user_dashboard')
@@ -325,6 +326,7 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
         list_url_name = 'declaration_rule_list'
         url_kwargs = {'declaration_id': declaration_id}
     else:
+        # This permission check is correct
         if not is_superadmin(request.user):
             messages.error(request, "You need superadmin rights to manage global rules.")
             return redirect('user_dashboard')
@@ -471,7 +473,6 @@ def declaration_rule_list(request, declaration_id):
         sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
 
-    # --- NEW: Pagination Logic ---
     total_count = queryset.count()
     default_per_page = 25
     per_page = request.GET.get('per_page', default_per_page)
@@ -489,7 +490,6 @@ def declaration_rule_list(request, declaration_id):
         paginator = Paginator(queryset, per_page)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-    # --- END NEW ---
 
     get_params = request.GET.copy()
     if 'page' in get_params:
@@ -501,9 +501,9 @@ def declaration_rule_list(request, declaration_id):
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'filter_proposal': filter_proposal,
         'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
-    return render(request, 'tax_processor/rule_list.html', context)
+    return render(request, 'tax_processor/declaration_rule_list.html', context)
 
 
 # -----------------------------------------------------------
@@ -603,7 +603,6 @@ def user_dashboard(request):
         sort_by = '-tax_period_start'
     queryset = queryset.order_by(sort_by)
 
-    # --- NEW: Pagination Logic ---
     total_count = queryset.count()
     default_per_page = 25
     per_page = request.GET.get('per_page', default_per_page)
@@ -621,7 +620,6 @@ def user_dashboard(request):
         paginator = Paginator(queryset, per_page)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-    # --- END NEW ---
 
     get_params = request.GET.copy()
     if 'page' in get_params:
@@ -632,7 +630,7 @@ def user_dashboard(request):
         'is_admin': is_superadmin(request.user),
         'search_query': search_query, 'filter_status': filter_status,
         'current_sort': sort_by, 'get_params': get_params.urlencode(),
-        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/user_dashboard.html', context)
 
@@ -683,7 +681,6 @@ def review_queue(request, declaration_id=None):
         sort_by = '-transaction__transaction_date'
     queryset = queryset.order_by(sort_by)
 
-    # --- NEW: Pagination Logic ---
     total_count = queryset.count()
     default_per_page = 25
     per_page = request.GET.get('per_page', default_per_page)
@@ -701,7 +698,6 @@ def review_queue(request, declaration_id=None):
         paginator = Paginator(queryset, per_page)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-    # --- END NEW ---
 
     get_params = request.GET.copy()
     if 'page' in get_params:
@@ -713,7 +709,7 @@ def review_queue(request, declaration_id=None):
         'current_declaration': current_declaration, 'search_query': search_query,
         'filter_user': filter_user, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
         'hints': hints,
-        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
 
     if is_superadmin(user) and not declaration_id:
@@ -1123,7 +1119,6 @@ def all_transactions_list(request, declaration_id):
         sort_by = '-transaction_date'
     queryset = queryset.order_by(sort_by)
 
-    # --- NEW: Pagination Logic ---
     total_count = queryset.count()
     default_per_page = 50 # Default 50 for this specific page
     per_page = request.GET.get('per_page', default_per_page)
@@ -1141,7 +1136,6 @@ def all_transactions_list(request, declaration_id):
         paginator = Paginator(queryset, per_page)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-    # --- END NEW ---
 
     get_params = request.GET.copy()
     if 'page' in get_params:
@@ -1153,7 +1147,7 @@ def all_transactions_list(request, declaration_id):
         'filter_type': filter_type, 'filter_entity': filter_entity, 'filter_scope': filter_scope,
         'filter_status': filter_status, 'entity_choices': Transaction.ENTITY_CHOICES,
         'scope_choices': Transaction.SCOPE_CHOICES,
-        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/all_transactions_list.html', context)
 
@@ -1222,8 +1216,10 @@ def edit_transaction(request, transaction_id):
 # -----------------------------------------------------------
 # 9. EntityTypeRule Views
 # -----------------------------------------------------------
-@user_passes_test(is_superadmin)
+# --- MODIFIED: Changed decorator ---
+@user_passes_test(is_permitted_user)
 def entity_rule_list(request, declaration_id=None):
+# --- END MODIFIED ---
     is_specific = declaration_id is not None
     declaration = None
     if is_specific:
@@ -1250,7 +1246,6 @@ def entity_rule_list(request, declaration_id=None):
     if sort_by not in valid_sort_fields: sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
 
-    # --- NEW: Pagination Logic ---
     total_count = queryset.count()
     default_per_page = 25
     per_page = request.GET.get('per_page', default_per_page)
@@ -1268,7 +1263,6 @@ def entity_rule_list(request, declaration_id=None):
         paginator = Paginator(queryset, per_page)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-    # --- END NEW ---
 
     get_params = request.GET.copy()
     if 'page' in get_params: del get_params['page']
@@ -1279,12 +1273,14 @@ def entity_rule_list(request, declaration_id=None):
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
         'rule_type': 'entity',
-        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/entity_rule_list.html', context)
 
-@user_passes_test(is_superadmin)
+# --- MODIFIED: Changed decorator ---
+@user_passes_test(is_permitted_user)
 def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
+# --- END MODIFIED ---
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
@@ -1410,8 +1406,10 @@ def entity_rule_delete(request, rule_id, declaration_id=None):
 # -----------------------------------------------------------
 # 10. TransactionScopeRule Views
 # -----------------------------------------------------------
-@user_passes_test(is_superadmin)
+# --- MODIFIED: Changed decorator ---
+@user_passes_test(is_permitted_user)
 def scope_rule_list(request, declaration_id=None):
+# --- END MODIFIED ---
     is_specific = declaration_id is not None
     declaration = None
     if is_specific:
@@ -1438,7 +1436,6 @@ def scope_rule_list(request, declaration_id=None):
     if sort_by not in valid_sort_fields: sort_by = 'priority'
     queryset = queryset.order_by(sort_by)
 
-    # --- NEW: Pagination Logic ---
     total_count = queryset.count()
     default_per_page = 25
     per_page = request.GET.get('per_page', default_per_page)
@@ -1456,7 +1453,6 @@ def scope_rule_list(request, declaration_id=None):
         paginator = Paginator(queryset, per_page)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-    # --- END NEW ---
 
     get_params = request.GET.copy()
     if 'page' in get_params: del get_params['page']
@@ -1467,12 +1463,14 @@ def scope_rule_list(request, declaration_id=None):
         'is_admin': is_superadmin(request.user), 'search_query': search_query,
         'filter_active': filter_active, 'current_sort': sort_by, 'get_params': get_params.urlencode(),
         'rule_type': 'scope',
-        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated # <-- NEW
+        'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/scope_rule_list.html', context)
 
-@user_passes_test(is_superadmin)
+# --- MODIFIED: Changed decorator ---
+@user_passes_test(is_permitted_user)
 def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
+# --- END MODIFIED ---
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
@@ -1592,23 +1590,18 @@ def scope_rule_delete(request, rule_id, declaration_id=None):
     messages.success(request, f"Scope Rule '{rule_name}' successfully deleted.")
     return redirect(list_url_name, **url_kwargs)
 
-# --- NEW: Hint Dismissal View ---
 @user_passes_test(is_permitted_user)
 @require_POST
 def dismiss_hint(request, hint_id):
-    # Get the hint and ensure the user has permission to dismiss it
     hint_query = Q(pk=hint_id)
     if not is_superadmin(request.user):
         hint_query &= Q(declaration__created_by=request.user)
 
     hint = get_object_or_404(AnalysisHint, hint_query)
 
-    # Mark as resolved and save
     hint.is_resolved = True
     hint.save()
 
     messages.info(request, f"Hint '{hint.title}' dismissed.")
 
-    # Redirect back to the review queue for that declaration
     return redirect('review_queue_declaration', declaration_id=hint.declaration.id)
-# --- END NEW ---
