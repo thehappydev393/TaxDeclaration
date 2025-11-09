@@ -280,6 +280,31 @@ def flatten_headers(multiindex_cols):
         new_cols.append(final_col)
     return new_cols
 
+def validate_statement_owner(content_for_search: Union[List[str], str], client_first_name: str, client_last_name: str) -> bool:
+    """
+    Validates that the client's first and last name are present in the
+    statement's header content.
+    """
+    # If no name is provided in the declaration, skip validation
+    if not client_first_name or not client_last_name:
+        return True
+
+    # Combine list of strings (Excel) or use single string (PDF)
+    if isinstance(content_for_search, list):
+        content_str = " ".join(content_for_search).lower()
+    else:
+        content_str = content_for_search.lower()
+
+    fn = client_first_name.lower()
+    ln = client_last_name.lower()
+
+    # Check if both first and last name are present somewhere in the text
+    if fn in content_str and ln in content_str:
+        return True
+
+    print(f"   [Validation Error] Client '{fn} {ln}' not found in statement header.")
+    return False
+
 # ------------------------------------------------------------------------
 # Main Parsing Function (unchanged)
 # ------------------------------------------------------------------------

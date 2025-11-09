@@ -12,7 +12,8 @@ from .parser_logic import (
     normalize_transactions,
     extract_full_content_for_search,
     identify_bank_from_text,
-    find_header_start_index
+    find_header_start_index,
+    validate_statement_owner
 )
 import pandas as pd
 
@@ -42,8 +43,18 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
                 search_content = ' '.join(file_content_for_search)
             else:
                 search_content = file_content_for_search
+
             bank_name = identify_bank_from_text(search_content)
             header_index = find_header_start_index(file_content_for_search, ext)
+
+            is_owner_valid = validate_statement_owner(
+                file_content_for_search,
+                declaration_obj.first_name,
+                declaration_obj.last_name
+            )
+            if not is_owner_valid:
+                return 0, f"Validation Error: Client name '{declaration_obj.first_name} {declaration_obj.last_name}' was not found in the file {filename}."
+
             if ext in ('.xls', '.xlsx'):
                 content_source = io.BytesIO(file_content)
             else:
