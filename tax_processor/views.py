@@ -537,6 +537,8 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
         'list_url_name': list_url_name,
         'url_kwargs': url_kwargs,
         'bank_names': BANK_NAMES_LIST,
+        'entity_choices': ENTITY_CHOICES,
+        'scope_choices': SCOPE_CHOICES,
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/rule_form.html', context)
@@ -979,6 +981,8 @@ def resolve_transaction(request, unmatched_id):
         'rule_form': rule_form,
         'condition_formset': condition_formset,
         'bank_names': BANK_NAMES_LIST,
+        'entity_choices': ENTITY_CHOICES,
+        'scope_choices': SCOPE_CHOICES,
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/resolve_transaction.html', context)
