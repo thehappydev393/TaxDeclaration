@@ -10,7 +10,7 @@ from django.utils import timezone
 from .forms import (
     StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet,
     AddStatementsForm, TransactionEditForm, EntityTypeRuleForm, TransactionScopeRuleForm,
-    ENTITY_CHOICES, SCOPE_CHOICES # <-- NEW: Import choices
+    ENTITY_CHOICES, SCOPE_CHOICES
 )
 from .services import import_statement_service
 from .rules_engine import RulesEngine
@@ -48,6 +48,7 @@ def is_permitted_user(user):
 def _update_declaration_status(declaration_id):
     try:
         declaration = Declaration.objects.get(pk=declaration_id)
+
         unassigned_count = Transaction.objects.filter(
             statement__declaration=declaration,
             declaration_point__isnull=True,
@@ -62,8 +63,10 @@ def _update_declaration_status(declaration_id):
             if declaration.status == 'ANALYSIS_COMPLETE':
                 declaration.status = 'DRAFT'
                 declaration.save()
+
     except Declaration.DoesNotExist:
         pass
+
 
 # -----------------------------------------------------------
 # 2. DATA INGESTION & DECLARATION MGMT
@@ -354,6 +357,7 @@ def rule_list_global(request):
     return render(request, 'tax_processor/rule_list.html', context)
 
 
+# --- ***** ADDED LOGGING HERE (Function 1/5) ***** ---
 @user_passes_test(is_permitted_user)
 def rule_create_or_update(request, rule_id=None, declaration_id=None):
     is_specific_rule = declaration_id is not None
@@ -387,6 +391,15 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
     formset_prefix = 'conditions'
 
     if request.method == 'POST':
+
+        # --- NEW: Logging ---
+        print("\n--- DEBUG: rule_create_or_update POST ---")
+        print("Raw POST data:")
+        for key, value in request.POST.items():
+            if 'conditions-' in key:
+                print(f"  {key}: {value}")
+        # --- End Logging ---
+
         form = TaxRuleForm(request.POST, instance=rule)
         formset = BaseConditionFormSet(request.POST, prefix=formset_prefix)
 
@@ -399,10 +412,20 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
                  new_rule.declaration = None
 
             groups_dict = {}
+
+            # --- MODIFIED: Iterate over formset.forms, not formset.cleaned_data ---
             for form_instance in formset.forms:
                 if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
                     data = form_instance.cleaned_data
-                    group_index = data.get('group_index', 0)
+
+                    # --- NEW: Logging ---
+                    group_index = data.get('group_index') # Get value (could be None)
+                    if group_index is None:
+                        print(f"  [WARNING] Form {form_instance.prefix} has NO group_index! Defaulting to 0.")
+                        group_index = 0
+                    else:
+                        print(f"  [INFO] Form {form_instance.prefix} received group_index: {group_index}")
+                    # --- End Logging ---
 
                     if group_index not in groups_dict:
                         groups_dict[group_index] = {
@@ -418,10 +441,6 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
                         value_to_save = data.get('value_field')
                     elif field == 'statement__bank_name':
                         value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
-                    elif field == 'entity_type':
-                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_entity')
-                    elif field == 'transaction_scope':
-                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_scope')
                     else:
                         value_to_save = data.get('value')
 
@@ -430,6 +449,7 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
                         'type': condition_type,
                         'value': value_to_save
                     })
+            # --- END MODIFIED ---
 
             groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
 
@@ -437,6 +457,12 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
                 'root_logic': request.POST.get('root_logic', 'AND'),
                 'groups': groups_list
             }
+
+            # --- NEW: Logging ---
+            print("Final JSON being saved:")
+            print(json.dumps(new_rule.conditions_json, indent=4))
+            print("------------------------------------------\n")
+            # --- End Logging ---
 
             if rule and rule.proposal_status == 'PENDING_GLOBAL' and not is_superadmin(request.user):
                  new_rule.proposal_status = 'NONE'
@@ -447,6 +473,20 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
                  return redirect(list_url_name, **url_kwargs)
             except IntegrityError:
                  messages.error(request, f"A rule named '{new_rule.rule_name}' already exists for this scope (global or specific declaration). Please choose a different name.")
+
+        else:
+            # --- NEW: Logging ---
+            print("\n--- DEBUG: Form or Formset INVALID ---")
+            if not form.is_valid():
+                print("Main form errors:", form.errors.as_json())
+            if not formset.is_valid():
+                print("Formset errors:", formset.errors)
+                for i, form_instance in enumerate(formset.forms):
+                    if not form_instance.is_valid():
+                        print(f"  Form {i} errors:", form_instance.errors.as_json())
+            print("--------------------------------------\n")
+            # --- End Logging ---
+
 
     else: # GET request
         initial_form_data = {}; initial_formset_data = []
@@ -497,8 +537,6 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
         'list_url_name': list_url_name,
         'url_kwargs': url_kwargs,
         'bank_names': BANK_NAMES_LIST,
-        'entity_choices': ENTITY_CHOICES,  # <-- NEW
-        'scope_choices': SCOPE_CHOICES,    # <-- NEW
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/rule_form.html', context)
@@ -524,7 +562,6 @@ def rule_delete(request, rule_id, declaration_id=None):
     rule.delete()
     messages.success(request, f"Tax Rule '{rule_name}' successfully deleted.")
     return redirect(list_url_name, **url_kwargs)
-
 
 # -----------------------------------------------------------
 # 4. DECLARATION-SPECIFIC (CATEGORY) RULE LIST VIEW
@@ -588,7 +625,6 @@ def declaration_rule_list(request, declaration_id):
         'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/declaration_rule_list.html', context)
-
 
 # -----------------------------------------------------------
 # 5. GLOBAL RULE PROPOSAL WORKFLOW
@@ -729,7 +765,7 @@ def review_queue(request, declaration_id=None):
     hints = []
     if declaration_id:
         current_declaration = get_object_or_404(Declaration, pk=declaration_id)
-        if not (is_superadmin(user) or current_declaration.created_by == request.user):
+        if not (is_superadmin(user) or current_declaration.created_by == user):
             messages.error(request, "Permission denied."); return redirect('user_dashboard')
         queryset = queryset.filter(transaction__statement__declaration_id=declaration_id)
         title = f"Review Queue - {current_declaration.name}"
@@ -801,6 +837,7 @@ def review_queue(request, declaration_id=None):
     return render(request, 'tax_processor/review_queue.html', context)
 
 
+# --- ***** THIS IS THE FIX (Function 2/5) ***** ---
 @user_passes_test(is_permitted_user)
 def resolve_transaction(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
@@ -844,13 +881,14 @@ def resolve_transaction(request, unmatched_id):
                         new_rule = None
                         if action == 'create_specific':
                             new_rule = rule_form.save(commit=False)
-                            new_rule.declaration_point = resolved_point_obj
+                            new_rule.declaration_point = resolved_point_obj # Assign point from main form
 
                             new_rule.created_by = request.user
                             new_rule.declaration = declaration
                             new_rule.proposal_status = 'NONE'
 
                             groups_dict = {}
+                            # --- MODIFIED: Iterate over formset.forms ---
                             for form_instance in condition_formset.forms:
                                 if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
                                     data = form_instance.cleaned_data
@@ -870,10 +908,6 @@ def resolve_transaction(request, unmatched_id):
                                         value_to_save = data.get('value_field')
                                     elif field == 'statement__bank_name':
                                         value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
-                                    elif field == 'entity_type':
-                                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_entity')
-                                    elif field == 'transaction_scope':
-                                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_scope')
                                     else:
                                         value_to_save = data.get('value')
 
@@ -882,6 +916,7 @@ def resolve_transaction(request, unmatched_id):
                                         'type': condition_type,
                                         'value': value_to_save
                                     })
+                            # --- END MODIFIED ---
 
                             groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
 
@@ -944,8 +979,6 @@ def resolve_transaction(request, unmatched_id):
         'rule_form': rule_form,
         'condition_formset': condition_formset,
         'bank_names': BANK_NAMES_LIST,
-        'entity_choices': ENTITY_CHOICES,  # <-- NEW
-        'scope_choices': SCOPE_CHOICES,    # <-- NEW
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/resolve_transaction.html', context)
@@ -1071,6 +1104,7 @@ def review_proposals(request):
     return render(request, 'tax_processor/review_proposals.html', context)
 
 
+# --- ***** THIS IS THE FIX (Function 3/5) ***** ---
 @user_passes_test(is_superadmin)
 def finalize_rule(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id); transaction = unmatched_item.transaction
@@ -1088,6 +1122,7 @@ def finalize_rule(request, unmatched_id):
                 new_rule = form.save(commit=False); new_rule.created_by = request.user; new_rule.declaration = None
 
                 groups_dict = {}
+                # --- MODIFIED: Iterate over formset.forms ---
                 for form_instance in formset.forms:
                     if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
                         data = form_instance.cleaned_data
@@ -1107,10 +1142,6 @@ def finalize_rule(request, unmatched_id):
                             value_to_save = data.get('value_field')
                         elif field == 'statement__bank_name':
                             value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
-                        elif field == 'entity_type':
-                            value_to_save = request.POST.get(f'{form_instance.prefix}-value_entity')
-                        elif field == 'transaction_scope':
-                            value_to_save = request.POST.get(f'{form_instance.prefix}-value_scope')
                         else:
                             value_to_save = data.get('value')
 
@@ -1119,6 +1150,7 @@ def finalize_rule(request, unmatched_id):
                             'type': condition_type,
                             'value': value_to_save
                         })
+                # --- END MODIFIED ---
 
                 groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
 
@@ -1140,9 +1172,7 @@ def finalize_rule(request, unmatched_id):
             'transaction': transaction, 'title': f"Finalize Rule Proposal #{unmatched_id}",
             'proposal_notes': proposal_data.get('notes'),
             'proposed_category_name': proposed_category_name, 'is_admin': True,
-            'bank_names': BANK_NAMES_LIST,
-            'entity_choices': ENTITY_CHOICES,  # <-- NEW
-            'scope_choices': SCOPE_CHOICES,    # <-- NEW
+            'bank_names': BANK_NAMES_LIST
         }
         return render(request, 'tax_processor/finalize_rule.html', context)
 
@@ -1164,9 +1194,7 @@ def finalize_rule(request, unmatched_id):
             'transaction': transaction, 'title': f"Finalize Rule Proposal #{unmatched_id}",
             'proposal_notes': proposal_data.get('notes'),
             'proposed_category_name': proposed_category_name, 'is_admin': True,
-            'bank_names': BANK_NAMES_LIST,
-            'entity_choices': ENTITY_CHOICES,  # <-- NEW
-            'scope_choices': SCOPE_CHOICES,    # <-- NEW
+            'bank_names': BANK_NAMES_LIST
         }
         return render(request, 'tax_processor/finalize_rule.html', context)
 
@@ -1276,8 +1304,8 @@ def all_transactions_list(request, declaration_id):
         'declaration': declaration, 'page_obj': page_obj, 'search_query': search_query, 'current_sort': sort_by,
         'is_admin': is_superadmin(request.user), 'get_params': get_params.urlencode(),
         'filter_type': filter_type, 'filter_entity': filter_entity, 'filter_scope': filter_scope,
-        'filter_status': filter_status, 'entity_choices': Transaction.ENTITY_CHOICES,
-        'scope_choices': Transaction.SCOPE_CHOICES,
+        'filter_status': filter_status, 'entity_choices': ENTITY_CHOICES,
+        'scope_choices': SCOPE_CHOICES,
         'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/all_transactions_list.html', context)
@@ -1409,7 +1437,7 @@ def entity_rule_list(request, declaration_id=None):
     }
     return render(request, 'tax_processor/entity_rule_list.html', context)
 
-
+# --- ***** THIS IS THE FIX (Function 4/5) ***** ---
 @user_passes_test(is_permitted_user)
 def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
     is_specific_rule = declaration_id is not None
@@ -1452,6 +1480,7 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
             else:
                  new_rule.declaration = None
 
+            # --- MODIFIED: Build Nested JSON from Groups ---
             groups_dict = {}
             for form_instance in formset.forms:
                 if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
@@ -1472,10 +1501,6 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
                         value_to_save = data.get('value_field')
                     elif field == 'statement__bank_name':
                         value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
-                    elif field == 'entity_type':
-                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_entity')
-                    elif field == 'transaction_scope':
-                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_scope')
                     else:
                         value_to_save = data.get('value')
 
@@ -1491,6 +1516,7 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
                 'root_logic': request.POST.get('root_logic', 'AND'),
                 'groups': groups_list
             }
+            # --- END MODIFIED ---
 
             try:
                  new_rule.save()
@@ -1545,10 +1571,7 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'form': form, 'formset': formset, 'title': title, 'rule': rule,
         'declaration': declaration, 'is_specific_rule': is_specific_rule,
         'list_url_name': list_url_name, 'url_kwargs': url_kwargs,
-        'bank_names': BANK_NAMES_LIST,
-        'entity_choices': ENTITY_CHOICES,  # <-- NEW
-        'scope_choices': SCOPE_CHOICES,    # <-- NEW
-        'is_admin': is_superadmin(request.user),
+        'bank_names': BANK_NAMES_LIST, 'is_admin': is_superadmin(request.user),
         'rule_type': 'entity'
     }
     return render(request, 'tax_processor/rule_form.html', context)
@@ -1639,7 +1662,7 @@ def scope_rule_list(request, declaration_id=None):
     }
     return render(request, 'tax_processor/scope_rule_list.html', context)
 
-
+# --- ***** THIS IS THE FIX (Function 5/5) ***** ---
 @user_passes_test(is_permitted_user)
 def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
     is_specific_rule = declaration_id is not None
@@ -1680,6 +1703,7 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
             else:
                  new_rule.declaration = None
 
+            # --- MODIFIED: Build Nested JSON from Groups ---
             groups_dict = {}
             for form_instance in formset.forms:
                 if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
@@ -1700,10 +1724,6 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
                         value_to_save = data.get('value_field')
                     elif field == 'statement__bank_name':
                         value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
-                    elif field == 'entity_type':
-                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_entity')
-                    elif field == 'transaction_scope':
-                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_scope')
                     else:
                         value_to_save = data.get('value')
 
@@ -1719,6 +1739,7 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
                 'root_logic': request.POST.get('root_logic', 'AND'),
                 'groups': groups_list
             }
+            # --- END MODIFIED ---
 
             try:
                  new_rule.save()
@@ -1773,10 +1794,7 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'form': form, 'formset': formset, 'title': title, 'rule': rule,
         'declaration': declaration, 'is_specific_rule': is_specific_rule,
         'list_url_name': list_url_name, 'url_kwargs': url_kwargs,
-        'bank_names': BANK_NAMES_LIST,
-        'entity_choices': ENTITY_CHOICES,  # <-- NEW
-        'scope_choices': SCOPE_CHOICES,    # <-- NEW
-        'is_admin': is_superadmin(request.user),
+        'bank_names': BANK_NAMES_LIST, 'is_admin': is_superadmin(request.user),
         'rule_type': 'scope'
     }
     return render(request, 'tax_processor/rule_form.html', context)

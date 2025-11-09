@@ -276,7 +276,6 @@
 
 <script type="text/template" id="empty-condition-template">
     <div class="condition-form-row">
-        {{ formset.empty_form.group_index }}
         {% for hidden in formset.empty_form.hidden_fields %}{% if hidden.name|slice:"-group_index" != "-group-index" %}{{ hidden }}{% endif %}{% endfor %}
         <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
         <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>

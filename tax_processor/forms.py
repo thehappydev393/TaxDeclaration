@@ -90,6 +90,7 @@ DYNAMIC_FIELD_CHOICES = [
     ('description', 'Նկարագրություն (Description)'),
 ]
 
+# --- MODIFIED: ConditionForm ---
 class ConditionForm(forms.Form):
     field = forms.ChoiceField(
         choices=TRANSACTION_FIELD_CHOICES,
@@ -115,11 +116,11 @@ class ConditionForm(forms.Form):
     group_index = forms.IntegerField(
         widget=forms.HiddenInput(attrs={'class': 'condition-group-index'}),
         initial=0,
-        required=False
+        required=False  # <-- MODIFIED
     )
+# --- END MODIFIED ---
 
 BaseConditionFormSet = formset_factory(ConditionForm, extra=0, can_delete=True)
-
 
 class BaseRuleForm(forms.ModelForm):
     rule_name = forms.CharField(
@@ -151,7 +152,7 @@ class TaxRuleForm(BaseRuleForm):
 
 class EntityTypeRuleForm(BaseRuleForm):
     entity_type_result = forms.ChoiceField(
-        choices=Transaction.ENTITY_CHOICES,
+        choices=ENTITY_CHOICES,
         label="Արդյունքի Իրավական Կարգավիճակ",
         help_text="Եթե կանոնը համընկնի, գործարքին կտրվի այս կարգավիճակը:",
         required=True
@@ -162,7 +163,7 @@ class EntityTypeRuleForm(BaseRuleForm):
 
 class TransactionScopeRuleForm(BaseRuleForm):
     scope_result = forms.ChoiceField(
-        choices=Transaction.SCOPE_CHOICES,
+        choices=SCOPE_CHOICES,
         label="Արդյունքի Տարածք",
         help_text="Եթե կանոնը համընկնի, գործարքին կտրվի այս կարգավիճակը:",
         required=True
