@@ -61,7 +61,7 @@ TRANSACTION_FIELD_CHOICES = [
     ('description', 'Նկարագրություն (Description)'),
     ('sender', 'Ուղարկող (Sender)'),
     ('sender_account', 'Ուղարկողի Հաշիվ (Sender Account)'),
-    ('amount', 'Գումար (Amount)'),
+    ('amount', 'Գումար (Amount - Compares in AMD)'),
     ('currency', 'Արժույթ (Currency)'),
     ('statement__bank_name', 'Բանկի Անվանում (Bank Name)'),
     ('entity_type', 'Իրավական Կարգավիճակ (Entity Type)'),
