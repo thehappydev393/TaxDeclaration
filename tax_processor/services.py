@@ -20,7 +20,6 @@ import pandas as pd
 def import_statement_service(uploaded_file, declaration_obj: Declaration, user: User):
     """
     Handles file saving, parsing, normalization, and saving transactions to the DB.
-    (MODIFIED: to include date_from_description)
     """
 
     # --- 1. Prepare File Content ---
@@ -47,6 +46,7 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
             bank_name = identify_bank_from_text(search_content)
             header_index = find_header_start_index(file_content_for_search, ext)
 
+            # --- Validation ---
             is_owner_valid = validate_statement_owner(
                 file_content_for_search,
                 declaration_obj.first_name,
@@ -73,7 +73,7 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
             if df_universal.empty:
                 return 0, f"File {filename}: No transactions (in or out) found after parsing."
 
-            # --- 4. Database Saving Logic (MODIFIED) ---
+            # --- 4. Database Saving Logic ---
             statement = Statement.objects.create(
                 declaration=declaration_obj,
                 file_name=filename,
@@ -88,10 +88,7 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
                         statement=statement,
                         transaction_date=row['Transaction_Date'],
                         provision_date=row['Provision_Date'],
-                        # --- NEW: Save date_from_description ---
-                        # Handle NaT (Not a Time) from pandas, which becomes None in DB
                         date_from_description=row['date_from_description'] if pd.notna(row['date_from_description']) else None,
-                        # --- END NEW ---
                         amount=row['Amount'],
                         currency=row['Currency'],
                         description=row['Description'],
@@ -105,11 +102,13 @@ def import_statement_service(uploaded_file, declaration_obj: Declaration, user: 
             Transaction.objects.bulk_create(transaction_objects)
 
             return transactions_count, f"Successfully imported {transactions_count} transactions (in and out)."
-            # --- END MODIFICATION ---
 
+    # --- THIS BLOCK IS NOW CORRECTLY INDENTED ---
     except Exception as e:
         print(f"IMPORT CRITICAL ERROR for {filename}: {e}")
+        traceback.print_exc()
         return 0, f"Import failed due to internal error: {e}"
+    # --- END FIX ---
 
     finally:
         # --- 5. Clean up ---

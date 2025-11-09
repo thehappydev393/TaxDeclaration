@@ -8,7 +8,7 @@ from .models import (
     EntityTypeRule, TransactionScopeRule, Transaction # Make sure Transaction is imported
 )
 
-# --- (Keep Helper Widgets and DeclarationPointChoiceField as they are) ---
+# ... (UnescapedTextarea, DeclarationPointChoiceField, StatementUploadForm are unchanged) ...
 class UnescapedTextarea(forms.Textarea):
     def render(self, name, value, attrs=None, renderer=None):
         if value is None: value = ''; return super().render(name, value, attrs, renderer)
@@ -17,7 +17,6 @@ class DeclarationPointChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         description_preview = obj.description[:50]; return f"{obj.name} - {description_preview}..."
 
-# --- (Keep StatementUploadForm as is) ---
 class StatementUploadForm(forms.Form):
     client_name = forms.CharField(
         max_length=100,
@@ -55,8 +54,6 @@ class StatementUploadForm(forms.Form):
             self.order_fields(self.field_order)
 
 
-# --- UPDATED: TRANSACTION_FIELD_CHOICES ---
-# Added new fields we can use as the *source* of a rule
 TRANSACTION_FIELD_CHOICES = [
     ('description', 'Նկարագրություն (Description)'),
     ('sender', 'Ուղարկող (Sender)'),
@@ -67,10 +64,6 @@ TRANSACTION_FIELD_CHOICES = [
     ('entity_type', 'Իրավական Կարգավիճակ (Entity Type)'),
     ('transaction_scope', 'Տարածք (Scope)'),
 ]
-# --- END UPDATED ---
-
-# --- UPDATED: CONDITION_TYPE_CHOICES ---
-# Added new "Field Value" comparison types
 CONDITION_TYPE_CHOICES = [
     ('CONTAINS_KEYWORD', 'պարունակում է (contains keyword)'),
     ('DOES_NOT_CONTAIN_KEYWORD', 'ՉԻ պարունակում (does NOT contain)'),
@@ -84,19 +77,14 @@ CONDITION_TYPE_CHOICES = [
     ('NOT_CONTAINS_FIELD_VALUE', 'ՉԻ պարունակում դաշտի արժեքը (does not contain field value)'),
     ('EQUALS_FIELD_VALUE', 'հավասար է դաշտի արժեքին (equals field value)'),
 ]
-# --- END UPDATED ---
-
-# --- NEW: DYNAMIC_FIELD_CHOICES ---
-# These are the fields a user can compare *against* (the "right side" of the rule)
 DYNAMIC_FIELD_CHOICES = [
     ('statement__declaration__first_name', 'Հաճախորդի Անուն (Client First Name)'),
     ('statement__declaration__last_name', 'Հաճախորդի Ազգանուն (Client Last Name)'),
-    ('sender', 'Ուղարկող (Sender)'), # Compare description to sender, etc.
+    ('sender', 'Ուղարկող (Sender)'),
     ('description', 'Նկարագրություն (Description)'),
 ]
-# --- END NEW ---
 
-# --- UPDATED: ConditionForm ---
+# --- MODIFIED: ConditionForm ---
 class ConditionForm(forms.Form):
     field = forms.ChoiceField(
         choices=TRANSACTION_FIELD_CHOICES,
@@ -108,90 +96,79 @@ class ConditionForm(forms.Form):
         label="Պայման",
         widget=forms.Select(attrs={'class': 'condition-type'})
     )
-    # This is the original text input
     value = forms.CharField(
         label="Արժեք",
         widget=forms.TextInput(attrs={'class': 'condition-value-input form-control', 'placeholder': 'Մուտքագրեք արժեքը...'}),
-        required=False # Now optional, will be toggled by JS
+        required=False
     )
-    # This is the new dropdown for field-to-field comparison
     value_field = forms.ChoiceField(
         choices=DYNAMIC_FIELD_CHOICES,
-        label="Համեմատվող Դաշտ", # Comparison Field
+        label="Համեմատվող Դաշտ",
         widget=forms.Select(attrs={'class': 'condition-value-field form-control'}),
-        required=False # Also optional
+        required=False
     )
-# --- END UPDATED ---
+    group_index = forms.IntegerField(
+        widget=forms.HiddenInput(attrs={'class': 'condition-group-index'}),
+        initial=0,
+        required=False  # <-- MODIFIED: Make not required
+    )
+# --- END MODIFIED ---
 
 BaseConditionFormSet = formset_factory(ConditionForm, extra=0, can_delete=True)
 
 
-# --- Base Form for all Rule Types ---
+# --- (BaseRuleForm, TaxRuleForm, EntityTypeRuleForm, TransactionScopeRuleForm are unchanged) ---
 class BaseRuleForm(forms.ModelForm):
-    logic = forms.ChoiceField(
-        choices=[('AND', 'Համընկնում են ԲՈԼՈՐ պայմանները (AND)'), ('OR', 'Համընկնում է ՑԱՆԿԱՑԾ պայման (OR)'),],
-        label="Կանոնի Տրամաբանություն",
-        help_text="Ինչպես պետք է համակցվեն ստորև նշված պայմանները:",
-        required=False
-    )
     rule_name = forms.CharField(
         max_length=255,
         label="Կանոնի Անվանում",
         help_text="Տվեք հիշվող անուն այս կանոնին:",
         widget=forms.TextInput(attrs={'placeholder': 'Օրինակ՝ Ամսական Աշխատավարձ'}),
-        required=False
+        required=True
     )
     priority = forms.IntegerField(
         initial=50, min_value=1, max_value=100,
         label="Կանոնի Առաջնահերթություն",
         help_text="Ցածր թիվը նշանակում է ավելի բարձր առաջնահերթություն (1-100)։",
         widget=forms.NumberInput(attrs={'min': 1, 'max': 100}),
-        required=False
+        required=True
     )
     is_active = forms.BooleanField(initial=True, required=False, label="Ակտիվ")
 
-
-# --- TaxRuleForm inherits from BaseRuleForm ---
 class TaxRuleForm(BaseRuleForm):
     declaration_point = DeclarationPointChoiceField(
         queryset=DeclarationPoint.objects.all().order_by('name'),
         label="Հայտարարագրման Կետ (Category)",
         help_text="Ընտրեք այն կատեգորիան, որին կփոխանցվեն համապատասխան գործարքները։",
-        required=False
+        required=True
     )
     class Meta:
         model = TaxRule
-        fields = ['rule_name', 'priority', 'declaration_point', 'logic', 'is_active']
+        fields = ['rule_name', 'priority', 'declaration_point', 'is_active']
 
-
-# --- EntityTypeRuleForm ---
 class EntityTypeRuleForm(BaseRuleForm):
     entity_type_result = forms.ChoiceField(
         choices=Transaction.ENTITY_CHOICES,
         label="Արդյունքի Իրավական Կարգավիճակ",
         help_text="Եթե կանոնը համընկնի, գործարքին կտրվի այս կարգավիճակը:",
-        required=False
+        required=True
     )
     class Meta:
         model = EntityTypeRule
-        fields = ['rule_name', 'priority', 'entity_type_result', 'logic', 'is_active']
+        fields = ['rule_name', 'priority', 'entity_type_result', 'is_active']
 
-
-# --- TransactionScopeRuleForm ---
 class TransactionScopeRuleForm(BaseRuleForm):
     scope_result = forms.ChoiceField(
         choices=Transaction.SCOPE_CHOICES,
         label="Արդյունքի Տարածք",
         help_text="Եթե կանոնը համընկնի, գործարքին կտրվի այս կարգավիճակը:",
-        required=False
+        required=True
     )
     class Meta:
         model = TransactionScopeRule
-        fields = ['rule_name', 'priority', 'scope_result', 'logic', 'is_active']
+        fields = ['rule_name', 'priority', 'scope_result', 'is_active']
 
-# -----------------------------------------------------------
-# 3. Resolution Form
-# -----------------------------------------------------------
+# --- (ResolutionForm, AddStatementsForm, TransactionEditForm are unchanged) ---
 class ResolutionForm(forms.Form):
     ACTION_CHOICES = [('resolve_only', 'Միայն Լուծել'), ('create_specific', 'Լուծել և Ստեղծել Հատուկ Կանոն'), ('propose_global', 'Լուծել և Առաջարկել Գլոբալ Կանոն'),]
     resolved_point = DeclarationPointChoiceField(queryset=DeclarationPoint.objects.all().order_by('name'), label="Վերջնական Հարկային Հայտարարագրման Կետ", help_text="Ընտրեք այն կատեգորիան, որին պետք է դասել այս գործարքը։")

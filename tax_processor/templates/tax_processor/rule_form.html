@@ -1,5 +1,6 @@
 {% load static %}
-{% load i18n %} {# NEW: Load i18n for template tags #}
+{% load i18n %}
+{% load json_filters %}
 <!DOCTYPE html>
 <html lang="hy">
 <head>
@@ -21,26 +22,69 @@
         small { display: block; color: #6c757d; margin-top: 5px; }
         .errorlist { color: red; margin-top: 5px; font-size: 0.9em; list-style: none; padding: 0;}
 
-        /* Dynamic Formset Styling */
-        .conditions-section { margin-top: 30px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; }
-        .conditions-section h2 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; }
-        .condition-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; align-items: flex-start; }
-        .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
-
-        /* NEW: Wrapper for value inputs */
-        .condition-value-container { display: flex; flex-direction: column; }
-        .condition-value-container .form-control { /* Common style for inputs/selects in formset */
-            width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
-        }
-
         /* Button Styling */
         .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; text-align: center; }
         .btn-primary { background-color: #007bff; color: white; font-size: 1.1em; }
         .btn-primary:hover { background-color: #0056b3; }
         .btn-success { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; }
+        .btn-sm { padding: 5px 10px; font-size: 0.85em; }
         .cancel-link { color: #dc3545; margin-left: 15px; text-decoration: none; }
         .select2-container { width: 100% !important; box-sizing: border-box; }
+
+        /* --- Condition Group Styles --- */
+        .conditions-section { margin-top: 30px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; }
+        .conditions-section h2 { margin-top: 0; margin-bottom: 15px; color: #343a40; font-size: 1.3em; }
+
+        .root-logic-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .root-logic-container label { margin-bottom: 0; }
+
+        .condition-group-box {
+            background: #ffffff;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .group-header-logic { display: flex; align-items: center; gap: 10px; }
+        .group-header-logic label { margin-bottom: 0; font-size: 0.9em; }
+        .group-header-logic select { width: auto; padding: 5px; font-size: 0.9em; }
+
+        .condition-form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr auto;
+            gap: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 1px solid #f1f1f1;
+            border-radius: 4px;
+            background: #fff;
+            align-items: flex-start;
+        }
+        .condition-form-row label { font-size: 0.85em; margin-bottom: 3px; }
+        .condition-value-container { display: flex; flex-direction: column; }
+        .condition-value-container .form-control {
+            width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; font-size: 0.95em;
+        }
+        .group-actions { margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -65,7 +109,6 @@
         </div>
         {% endif %}
 
-
         <div class="field-group">
             {% for field in form %}
             <div style="margin-bottom: 15px;">
@@ -83,16 +126,31 @@
 
         <div class="conditions-section">
             <h2>Կանոնի Պայմաններ</h2>
+
+            <div class="root-logic-container" id="root-logic-container" style="display: none;">
+                <label for="root-logic-select">Համընկնում է</label>
+                <select id="root-logic-select" name="root_logic">
+                    <option value="AND">ԲՈԼՈՐ խմբերը (AND)</option>
+                    <option value="OR">ՑԱՆԿԱՑԾ խումբը (OR)</option>
+                </select>
+                <small>ստորև նշված խմբերից</small>
+            </div>
+
             {{ formset.management_form }}
             {% if formset.non_form_errors %}
             <div style="color: red;">
                 {% for error in formset.non_form_errors %} <p>{{ error }}</p> {% endfor %}
             </div>
             {% endif %}
-            <div id="condition-form-list">
+
+            <div id="condition-group-list">
+            </div>
+
+            <div id="condition-form-list-source" style="display: none;">
                 {% for form in formset %}
                 <div class="condition-form-row">
-                    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                    {{ form.group_index }}
+                    {% for hidden in form.hidden_fields %}{% if hidden.name|slice:"-group_index" != "-group_index" %}{{ hidden }}{% endif %}{% endfor %}
                     <div>
                         {{ form.field.label_tag }} {{ form.field }}
                         {% for error in form.field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
@@ -101,7 +159,6 @@
                         {{ form.condition_type.label_tag }} {{ form.condition_type }}
                         {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
                     </div>
-
                     <div class="condition-value-container">
                         <div class="condition-value-input-wrapper">
                             {{ form.value.label_tag }} {{ form.value }}
@@ -126,7 +183,7 @@
                     <div style="align-self: flex-end;">
                         {% if formset.can_delete %}
                         <div style="display: none;">{{ form.DELETE }}</div>
-                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
+                        <button type="button" class="btn btn-danger btn-sm btn-remove-condition">Ջնջել</button>
                         {% endif %}
                     </div>
                     {% if form.non_field_errors %}
@@ -138,36 +195,7 @@
                 {% endfor %}
             </div>
 
-            <div id="empty-form-template" style="display: none;">
-                <div class="condition-form-row">
-                    {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-                    <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
-                    <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>
-
-                    <div class="condition-value-container">
-                        <div class="condition-value-input-wrapper">
-                            {{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}
-                        </div>
-                        <div class="condition-value-select-wrapper" style="display: none;">
-                            <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">Արժեք</label>
-                            <select name="{{ formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ formset.empty_form.prefix }}-value_select_bank">
-                                <option value="">---------</option>
-                                {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
-                            </select>
-                        </div>
-                        <div class="condition-value-field-wrapper" style="display: none;">
-                            {{ formset.empty_form.value_field.label_tag }} {{ formset.empty_form.value_field }}
-                        </div>
-                    </div>
-                    <div style="align-self: flex-end;">
-                        {% if formset.can_delete %}
-                        <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
-                        <button type="button" class="btn btn-danger btn-remove">Ջնջել</button>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            <button type="button" id="add-condition-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայման</button>
+            <button type="button" id="add-group-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայմանի Խումբ</button>
         </div>
 
         <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Պահպանել Կանոնը</button>
@@ -180,142 +208,307 @@
     </form>
 </div>
 
+<script type="text/template" id="empty-group-template">
+    <div class="condition-group-box" data-group-index="__group_prefix__">
+        <div class="group-header">
+            <div class="group-header-logic">
+                <label for="group-__group_prefix__-logic-select">Համընկնում է</label>
+                <select id="group-__group_prefix__-logic-select" name="group-__group_prefix__-logic" class="group-logic-select">
+                    <option value="AND">ԲՈԼՈՐ պայմանները (AND)</option>
+                    <option value="OR">ՑԱՆԿԱՑԾ պայման (OR)</option>
+                </select>
+            </div>
+            <button type="button" class="btn btn-danger btn-sm btn-remove-group">Ջնջել Խումբը</button>
+        </div>
+        <div class="condition-list-container">
+        </div>
+        <div class="group-actions">
+            <button type="button" class="btn btn-primary btn-sm btn-add-condition">+ Ավելացնել Պայման</button>
+        </div>
+    </div>
+</script>
+
+<script type="text/template" id="empty-condition-template">
+    <div class="condition-form-row">
+        {{ formset.empty_form.group_index }}
+        {% for hidden in formset.empty_form.hidden_fields %}{% if hidden.name|slice:"-group_index" != "-group-index" %}{{ hidden }}{% endif %}{% endfor %}
+        <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
+        <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>
+        <div class="condition-value-container">
+            <div class="condition-value-input-wrapper">
+                {{ formset.empty_form.value.label_tag }} {{ formset.empty_form.value }}
+            </div>
+            <div class="condition-value-select-wrapper" style="display: none;">
+                <label for="id_{{ formset.empty_form.prefix }}-value_select_bank">Արժեք</label>
+                <select name="{{ formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ formset.empty_form.prefix }}-value_select_bank">
+                    <option value="">---------</option>
+                    {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
+                </select>
+            </div>
+            <div class="condition-value-field-wrapper" style="display: none;">
+                {{ formset.empty_form.value_field.label_tag }} {{ formset.empty_form.value_field }}
+            </div>
+        </div>
+        <div style="align-self: flex-end;">
+            {% if formset.can_delete %}
+            <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
+            <button type="button" class="btn btn-danger btn-sm btn-remove-condition">Ջնջել</button>
+            {% endif %}
+        </div>
+    </div>
+</script>
+{{ form.instance.conditions_json|json_script:"rule-data-json" }}
+
+
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="{% static 'tax_processor/select2/select2.min.js' %}"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // --- Configuration ---
-        // Condition types that use the dynamic field dropdown
-        const DYNAMIC_CONDITION_TYPES = [
-            'CONTAINS_FIELD_VALUE',
-            'NOT_CONTAINS_FIELD_VALUE',
-            'EQUALS_FIELD_VALUE'
-        ];
-        // The field value that triggers the bank name dropdown
+        const DYNAMIC_CONDITION_TYPES = ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE'];
         const BANK_FIELD_VALUE = 'statement__bank_name';
 
+        // --- Element References ---
+        const totalFormsInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
+        const conditionGroupList = document.getElementById('condition-group-list');
+        const addGroupBtn = document.getElementById('add-group-btn');
+        const rootLogicContainer = document.getElementById('root-logic-container');
+        const rootLogicSelect = document.getElementById('root-logic-select');
+
+        // --- Templates ---
+        const groupTemplate = document.getElementById('empty-group-template').innerHTML;
+        const conditionTemplate = document.getElementById('empty-condition-template').innerHTML;
+
+        let groupCounter = 0;
+
         /**
-         * Main function to toggle the visibility of the three value widgets
-         * based on the selected Field and Condition Type.
+         * Toggles the value input widgets based on field/condition type.
          */
         function updateValueWidgets(elementInRow) {
             const row = elementInRow.closest('.condition-form-row');
             if (!row) return;
-
-            // Find all elements in the row
             const conditionTypeSelect = row.querySelector('.condition-type');
             const fieldSelect = row.querySelector('.condition-field');
-
             const valueTextWrapper = row.querySelector('.condition-value-input-wrapper');
             const valueBankWrapper = row.querySelector('.condition-value-select-wrapper');
             const valueFieldWrapper = row.querySelector('.condition-value-field-wrapper');
-
             if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper) {
                 console.error("Could not find all required elements in formset row.", row);
                 return;
             }
-
-            // Get current selected values
             const conditionType = conditionTypeSelect.value;
             const fieldType = fieldSelect.value;
-
-            // --- Logic to show/hide widgets ---
             const isDynamic = DYNAMIC_CONDITION_TYPES.includes(conditionType);
             const isBankField = (fieldType === BANK_FIELD_VALUE);
-
-            // 1. Show/Hide the Dynamic Field Dropdown
             valueFieldWrapper.style.display = isDynamic ? 'block' : 'none';
-
-            // 2. Show/Hide the Bank Name Dropdown
-            // Show only if NOT dynamic AND the field is bank_name
             valueBankWrapper.style.display = (!isDynamic && isBankField) ? 'block' : 'none';
-
-            // 3. Show/Hide the default Text Input
-            // Show only if NOT dynamic AND the field is NOT bank_name
             valueTextWrapper.style.display = (!isDynamic && !isBankField) ? 'block' : 'none';
-
-            // --- Logic to swap 'name' attribute ---
-            // Get all input/select elements
             const valueTextInput = valueTextWrapper.querySelector('input');
             const valueBankSelect = valueBankWrapper.querySelector('select');
             const valueFieldSelect = valueFieldWrapper.querySelector('select');
-
-            // Store original names if not already stored
             if (!valueTextInput.dataset.originalName) valueTextInput.dataset.originalName = valueTextInput.name;
             if (!valueBankSelect.dataset.originalName) valueBankSelect.dataset.originalName = valueBankSelect.name;
             if (!valueFieldSelect.dataset.originalName) valueFieldSelect.dataset.originalName = valueFieldSelect.name;
-
-            // Set the 'name' attribute only for the visible element
             if (isDynamic) {
-                valueFieldSelect.name = valueFieldSelect.dataset.originalName;
-                valueTextInput.name = '';
-                valueBankSelect.name = '';
+                valueFieldSelect.name = valueFieldSelect.dataset.originalName; valueTextInput.name = ''; valueBankSelect.name = '';
             } else if (isBankField) {
-                valueBankSelect.name = valueBankSelect.dataset.originalName;
-                valueTextInput.name = '';
-                valueFieldSelect.name = '';
-            } else { // Is static text input
-                valueTextInput.name = valueTextInput.dataset.originalName;
-                valueBankSelect.name = '';
-                valueFieldSelect.name = '';
+                valueBankSelect.name = valueBankSelect.dataset.originalName; valueTextInput.name = ''; valueFieldSelect.name = '';
+            } else {
+                valueTextInput.name = valueTextInput.dataset.originalName; valueBankSelect.name = ''; valueFieldSelect.name = '';
             }
         }
 
-        // --- Formset (Add/Remove) Logic ---
-        const formList = document.getElementById('condition-form-list');
-        const addBtn = document.getElementById('add-condition-btn');
-        const emptyFormTemplateDiv = document.getElementById('empty-form-template');
-        const emptyFormTemplate = emptyFormTemplateDiv ? emptyFormTemplateDiv.innerHTML : '';
-        const totalFormsInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
-
-        function initializeRow(row) {
-            const fieldSelect = row.querySelector('.condition-field');
-            const conditionTypeSelect = row.querySelector('.condition-type');
-
+        /**
+         * Initializes event listeners on a newly added condition row.
+         */
+        function initializeConditionRow(rowElement) {
+            const fieldSelect = rowElement.querySelector('.condition-field');
+            const conditionTypeSelect = rowElement.querySelector('.condition-type');
             if (fieldSelect) {
                 fieldSelect.addEventListener('change', () => updateValueWidgets(fieldSelect));
             }
             if (conditionTypeSelect) {
                 conditionTypeSelect.addEventListener('change', () => updateValueWidgets(conditionTypeSelect));
             }
-            // Run once on init
             updateValueWidgets(fieldSelect || conditionTypeSelect);
         }
 
-        // Initialize all existing forms
-        formList.querySelectorAll('.condition-form-row').forEach(initializeRow);
+        /**
+         * Adds a new condition row to a specified group.
+         */
+        function addCondition(groupElement, groupIndex) {
+            let currentFormCount = parseInt(totalFormsInput.value, 10);
+            let newFormHtml = conditionTemplate.replace(/__prefix__/g, currentFormCount);
 
-        // Handle adding new forms
-        if (addBtn && emptyFormTemplate && totalFormsInput) {
-            addBtn.addEventListener('click', function() {
-                let currentFormCount = parseInt(totalFormsInput.value, 10);
-                let newFormHtml = emptyFormTemplate.replace(/__prefix__/g, currentFormCount);
-                let tempDiv = document.createElement('div');
-                tempDiv.innerHTML = newFormHtml;
-                const newRow = tempDiv.firstElementChild;
+            let tempDiv = document.createElement('div');
+            tempDiv.innerHTML = newFormHtml;
+            const newRow = tempDiv.firstElementChild;
 
-                if (newRow) {
-                    formList.appendChild(newRow);
-                    totalFormsInput.value = currentFormCount + 1;
-                    // Initialize the new row
-                    initializeRow(newRow);
-                }
-            });
+            // Set the hidden group_index field
+            const groupIndexInput = newRow.querySelector('.condition-group-index');
+            if (groupIndexInput) {
+                groupIndexInput.value = groupIndex;
+            }
+
+            groupElement.querySelector('.condition-list-container').appendChild(newRow);
+            totalFormsInput.value = currentFormCount + 1;
+
+            initializeConditionRow(newRow);
         }
 
-        // Handle removing forms
-        formList.addEventListener('click', function(e) {
-            if (e.target && e.target.classList.contains('btn-remove')) {
+        /**
+         * Adds a new condition GROUP to the form.
+         */
+        function addGroup(initialLogic = 'AND') {
+            let newGroupHtml = groupTemplate.replace(/__group_prefix__/g, groupCounter);
+
+            let tempDiv = document.createElement('div');
+            tempDiv.innerHTML = newGroupHtml;
+            const newGroup = tempDiv.firstElementChild;
+
+            newGroup.querySelector('.group-logic-select').value = initialLogic;
+            conditionGroupList.appendChild(newGroup);
+
+            groupCounter++;
+            updateRootLogicVisibility();
+            return newGroup; // Return the created group element
+        }
+
+        /**
+         * Shows the "AND/OR" for groups only if there is more than one group.
+         */
+        function updateRootLogicVisibility() {
+            // Count only visible groups
+            const visibleGroups = conditionGroupList.querySelectorAll('.condition-group-box:not([style*="display: none"])').length;
+            rootLogicContainer.style.display = visibleGroups > 1 ? 'flex' : 'none';
+        }
+
+        // --- Event Listeners ---
+
+        // 1. Add new group
+        addGroupBtn.addEventListener('click', function() {
+            const newGroup = addGroup('AND');
+            addCondition(newGroup, newGroup.dataset.groupIndex); // Add one default condition
+        });
+
+        // 2. Delegate clicks within the group list
+        conditionGroupList.addEventListener('click', function(e) {
+            // 2a. Add a new condition *to a group*
+            if (e.target && e.target.classList.contains('btn-add-condition')) {
+                const groupElement = e.target.closest('.condition-group-box');
+                const groupIndex = groupElement.dataset.groupIndex;
+                addCondition(groupElement, groupIndex);
+            }
+
+            // 2b. Remove a condition row
+            if (e.target && (e.target.classList.contains('btn-remove-condition') || e.target.classList.contains('btn-remove'))) {
                 let row = e.target.closest('.condition-form-row');
                 let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
-                if (deleteCheckbox) { deleteCheckbox.checked = true; }
+                if (deleteCheckbox) {
+                    deleteCheckbox.checked = true;
+                }
                 row.style.display = 'none';
+            }
+
+            // 2c. Remove a whole group
+            if (e.target && e.target.classList.contains('btn-remove-group')) {
+                let groupElement = e.target.closest('.condition-group-box');
+                // Mark all conditions inside for deletion
+                groupElement.querySelectorAll('.condition-form-row').forEach(row => {
+                    let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+                    if (deleteCheckbox) {
+                        deleteCheckbox.checked = true;
+                    }
+                    row.style.display = 'none';
+                });
+                // Hide the group box
+                groupElement.style.display = 'none';
+                updateRootLogicVisibility();
             }
         });
 
-        // --- Select2 Initialization ---
-        // This targets the main rule form's declaration point (if it exists)
+        // --- Initialization ---
+
+        // 1. Find all Django-rendered forms
+        const existingFormsContainer = document.getElementById('condition-form-list-source');
+        const existingForms = Array.from(existingFormsContainer.querySelectorAll('.condition-form-row'));
+
+        // 2. Check if we are loading an existing rule (simple or nested)
+        let rootLogic = 'AND';
+        let initialGroups = {}; // Stores { 0: 'AND', 1: 'OR', ... }
+        let jsonData = null;
+
+        {% if form.instance.pk %}
+        try {
+            const jsonDataRaw = document.getElementById('rule-data-json').textContent;
+            jsonData = JSON.parse(jsonDataRaw || '{}');
+
+            // Check if it's NEW nested format
+            if (jsonData && jsonData.root_logic && jsonData.groups) {
+                rootLogic = jsonData.root_logic;
+                jsonData.groups.forEach((group, index) => {
+                    initialGroups[index] = group.group_logic;
+                });
+            }
+            // Check if it's OLD flat format
+            else if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].logic) {
+                rootLogic = jsonData[0].logic;
+                initialGroups[0] = jsonData[0].logic; // Only one group, logic is the root logic
+            }
+
+        } catch (e) { console.error('Could not parse initial JSON.', e); }
+        {% endif %}
+
+        rootLogicSelect.value = rootLogic;
+
+        // --- ***** THIS IS THE FIX (Part 3) ***** ---
+        // New, correct initialization logic
+
+        let groupElements = {};
+
+        // 1. Create all the groups based on the parsed data
+        if (Object.keys(initialGroups).length > 0) {
+            for (const [index, logic] of Object.entries(initialGroups)) {
+                const newGroup = addGroup(logic);
+                groupElements[index] = newGroup;
+            }
+        } else {
+            // This is a brand new, empty rule. Add one default group.
+            const firstGroup = addGroup('AND');
+            groupElements[0] = firstGroup;
+        }
+
+        // 2. Move existing forms from the source list into their correct group
+        existingForms.forEach(row => {
+            const groupIndexInput = row.querySelector('.condition-group-index');
+            const groupIndex = groupIndexInput ? groupIndexInput.value : 0;
+
+            if (groupElements[groupIndex]) {
+                groupElements[groupIndex].querySelector('.condition-list-container').appendChild(row);
+                initializeConditionRow(row);
+            } else {
+                // This is a failsafe. If a condition says it belongs to group 5
+                // but only groups 0 and 1 exist, create group 5.
+                const newGroup = addGroup('AND'); // Default to AND
+                newGroup.querySelector('.condition-list-container').appendChild(row);
+                initializeConditionRow(row);
+                groupElements[groupIndex] = newGroup;
+            }
+        });
+
+        // 3. If it was a new form (no existing forms), add one default condition
+        if (existingForms.length === 0) {
+            addCondition(groupElements[0], 0);
+        }
+
+        // 4. Clean up the now-empty source container
+        existingFormsContainer.remove();
+
+        updateRootLogicVisibility();
+        // --- ***** END THE FIX (Part 3) ***** ---
+
+        // 3. Initialize Select2
         var declarationPointSelect = document.getElementById('{{ form.declaration_point.id_for_label }}');
         if (declarationPointSelect) {
             $(declarationPointSelect).select2({

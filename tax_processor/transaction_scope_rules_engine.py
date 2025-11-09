@@ -1,7 +1,7 @@
 # tax_processor/transaction_scope_rules_engine.py
 
 from django.db import transaction
-from .models import TransactionScopeRule, Transaction, ExchangeRate # <-- IMPORT ExchangeRate
+from .models import TransactionScopeRule, Transaction, ExchangeRate
 from decimal import Decimal, InvalidOperation
 import re
 import json
@@ -25,9 +25,7 @@ class TransactionScopeRulesEngine:
         )
         combined_rules_qs = global_rules_qs | specific_rules_qs
         self.rules = list(combined_rules_qs.order_by('priority', 'rule_name').distinct())
-
-        self.rates_cache = {} # <-- NEW: Initialize rate cache
-
+        self.rates_cache = {}
         print(f"   [TxScope Engine Init] Loaded {len(self.rules)} active rules for Decl ID {self.declaration_id}.")
 
     def _get_dynamic_value(self, transaction: Transaction, field_name: str):
@@ -44,7 +42,6 @@ class TransactionScopeRulesEngine:
         except AttributeError:
             return None
 
-    # --- UPDATED: _evaluate_condition method ---
     def _evaluate_condition(self, transaction: Transaction, condition: dict) -> bool:
         field = condition.get('field')
         condition_type = condition.get('type')
@@ -88,13 +85,9 @@ class TransactionScopeRulesEngine:
                     return str_field_value.strip().lower() == str_value_lower.strip()
                 elif condition_type == 'REGEX_MATCH':
                     return bool(re.search(str(value), str_field_value, re.IGNORECASE))
-
-                # --- MODIFIED: Amount comparison block ---
                 elif field == 'amount' and condition_type in ['GREATER_THAN', 'LESS_THAN', 'GREATER_THAN_OR_EQUAL', 'LESS_THAN_OR_EQUAL', 'RANGE_AMOUNT']:
                     try:
                         tx_amount = Decimal(str_field_value)
-
-                        # --- NEW: Convert to AMD if not AMD ---
                         if transaction.currency != 'AMD':
                             rate = self.rates_cache.get((transaction.transaction_date.date(), transaction.currency))
                             if rate is None:
@@ -102,17 +95,13 @@ class TransactionScopeRulesEngine:
                                     currency_code=transaction.currency,
                                     date__lt=transaction.transaction_date.date()
                                 ).order_by('-date').first()
-
                                 if closest_rate:
                                     rate = closest_rate.rate
                                     self.rates_cache[(transaction.transaction_date.date(), transaction.currency)] = rate
                                 else:
                                     print(f"   [TxScope Engine Warn] No exchange rate found for {transaction.currency} on {transaction.transaction_date.date()}. Rule will fail.")
                                     return False
-
                             tx_amount = tx_amount * rate
-                        # --- END NEW ---
-
                         if condition_type == 'GREATER_THAN': num_value = Decimal(str(value)); return tx_amount > num_value
                         elif condition_type == 'LESS_THAN': num_value = Decimal(str(value)); return tx_amount < num_value
                         elif condition_type == 'GREATER_THAN_OR_EQUAL': num_value = Decimal(str(value)); return tx_amount >= num_value
@@ -122,8 +111,6 @@ class TransactionScopeRulesEngine:
                             min_val = Decimal(min_val_str); max_val = Decimal(max_val_str); return min_val <= tx_amount <= max_val
                     except (InvalidOperation, ValueError, TypeError):
                         print(f"   [TxScope Engine Warn] Invalid number for comparison: {condition}, Tx Value: {field_value_raw}"); return False
-                # --- END MODIFIED ---
-
                 elif condition_type in ['GREATER_THAN', 'LESS_THAN', 'GREATER_THAN_OR_EQUAL', 'LESS_THAN_OR_EQUAL', 'RANGE_AMOUNT'] and field != 'amount':
                      print(f"   [TxScope Engine Warn] Numeric comparison '{condition_type}' on non-amount field '{field}'. Skipped: {condition}"); return False
                 else:
@@ -132,18 +119,74 @@ class TransactionScopeRulesEngine:
             print(f"   [TxScope Engine Error] Unexpected error evaluating condition: {condition}. Error: {e}"); traceback.print_exc(); return False
 
 
+    # --- NEW: Recursive function to evaluate a logic group ---
+    def _evaluate_logic_group(self, transaction: Transaction, group: dict) -> bool:
+        """
+        Evaluates a single group of conditions (e.g., "A AND B" or "C OR D").
+        """
+        logic = group.get('group_logic', 'AND').upper()
+        conditions = group.get('conditions', [])
+
+        if not conditions:
+            return False
+
+        results = [self._evaluate_condition(transaction, cond) for cond in conditions]
+
+        if logic == 'AND':
+            return all(results)
+        elif logic == 'OR':
+            return any(results)
+
+        print(f"   [TxScope Engine Warning] Unrecognized group logic '{logic}'. Defaulting to AND.")
+        return all(results)
+    # --- END NEW ---
+
+    # --- MODIFIED: _check_rule now supports both old and new JSON formats ---
     def _check_rule(self, transaction: Transaction, rule: TransactionScopeRule) -> bool:
+        """
+        Evaluates a full rule (groups of conditions) against a transaction.
+        Supports both new nested format and old flat format.
+        """
         try:
-            rule_conditions = rule.conditions_json
-            if not isinstance(rule_conditions, list): return False
-        except (TypeError, json.JSONDecodeError): return False
-        if not rule_conditions: return False
-        logic_block = rule_conditions[0]; logic = logic_block.get('logic', 'AND').upper(); checks = logic_block.get('checks', [])
-        if not checks: return False
-        results = [self._evaluate_condition(transaction, check) for check in checks]
-        if logic == 'AND': return all(results)
-        elif logic == 'OR': return any(results)
-        else: return all(results)
+            conditions_json = rule.conditions_json
+        except (TypeError, json.JSONDecodeError):
+            print(f"   [TxScope Engine Warning] Rule '{rule}' malformed JSON. Skipping."); return False
+
+        if not conditions_json:
+            return False
+
+        # --- Backward Compatibility: Detect OLD flat format ---
+        if isinstance(conditions_json, list) and conditions_json:
+            old_data = conditions_json[0]
+            if 'logic' in old_data and 'checks' in old_data:
+                conditions_json = {
+                    "root_logic": old_data['logic'],
+                    "groups": [
+                        {
+                            "group_logic": old_data['logic'],
+                            "conditions": old_data['checks']
+                        }
+                    ]
+                }
+        # --- End Backward Compatibility ---
+
+        # --- New Nested Logic ---
+        root_logic = conditions_json.get('root_logic', 'AND').upper()
+        groups = conditions_json.get('groups', [])
+
+        if not groups:
+            return False
+
+        group_results = [self._evaluate_logic_group(transaction, group) for group in groups]
+
+        if root_logic == 'AND':
+            return all(group_results)
+        elif root_logic == 'OR':
+            return any(group_results)
+
+        print(f"   [TxScope Engine Warning] Rule '{rule}' unrecognized root logic '{root_logic}'. Defaulting to AND.")
+        return all(group_results)
+    # --- END MODIFIED ---
 
 
     @transaction.atomic
@@ -167,7 +210,6 @@ class TransactionScopeRulesEngine:
         transactions_for_analysis = list(transactions_qs)
         print(f"   -> Found {len(transactions_for_analysis)} transactions to analyze.")
 
-        # --- NEW: Pre-fetch exchange rates ---
         self.rates_cache = {}
         non_amd_txs = [tx for tx in transactions_for_analysis if tx.currency != 'AMD']
         if non_amd_txs:
@@ -180,7 +222,6 @@ class TransactionScopeRulesEngine:
             )
             self.rates_cache = {(rate.date, rate.currency_code): rate.rate for rate in rates_qs}
             print(f"   -> Cached {len(self.rates_cache)} exchange rates for amount comparison.")
-        # --- END NEW ---
 
         transactions_to_update = []
         matched_count = 0

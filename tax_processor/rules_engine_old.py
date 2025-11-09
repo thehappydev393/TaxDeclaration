@@ -2,7 +2,7 @@
 
 from django.db import transaction
 from django.db.models import Q
-from .models import TaxRule, Transaction, UnmatchedTransaction, User, ExchangeRate
+from .models import TaxRule, Transaction, UnmatchedTransaction, User, ExchangeRate # <-- IMPORT ExchangeRate
 from decimal import Decimal, InvalidOperation
 import re
 import json
@@ -18,6 +18,7 @@ class RulesEngine:
 
     def __init__(self, declaration_id: int):
         self.declaration_id = declaration_id
+
         global_rules_qs = TaxRule.objects.filter(
             is_active=True,
             declaration__isnull=True
@@ -26,12 +27,17 @@ class RulesEngine:
             is_active=True,
             declaration_id=self.declaration_id
         )
+
         combined_rules_qs = global_rules_qs | specific_rules_qs
         self.rules = list(combined_rules_qs.order_by('priority', 'rule_name').distinct())
-        self.rates_cache = {}
+
+        self.rates_cache = {} # <-- NEW: Initialize rate cache
+
         print(f"   [Rule Engine Init] Loaded {len(self.rules)} active rules (global + specific for Decl ID {self.declaration_id}).")
 
+
     def _get_dynamic_value(self, transaction: Transaction, field_name: str):
+        # ... (existing function) ...
         try:
             if '__' in field_name:
                 related_parts = field_name.split('__')
@@ -46,6 +52,8 @@ class RulesEngine:
             return None
 
     def _evaluate_condition(self, transaction: Transaction, condition: dict) -> bool:
+        """Evaluates a single condition against a transaction field."""
+
         field = condition.get('field')
         condition_type = condition.get('type')
         value = condition.get('value')
@@ -68,6 +76,7 @@ class RulesEngine:
 
         try:
             if condition_type in DYNAMIC_CONDITION_TYPES:
+                # ... (existing dynamic field logic) ...
                 value_from_field_raw = self._get_dynamic_value(transaction, value)
                 if value_from_field_raw is None:
                     return False
@@ -78,8 +87,10 @@ class RulesEngine:
                     return str_value_from_field.lower() not in str_field_value.lower()
                 elif condition_type == 'EQUALS_FIELD_VALUE':
                     return str_field_value.strip().lower() == str_value_from_field.strip().lower()
+
             else:
                 str_value_lower = str(value).lower()
+
                 if condition_type == 'CONTAINS_KEYWORD':
                     keywords = [kw.strip() for kw in str_value_lower.split(',') if kw.strip()]; return any(kw in str_field_value.lower() for kw in keywords)
                 elif condition_type == 'DOES_NOT_CONTAIN_KEYWORD':
@@ -88,23 +99,32 @@ class RulesEngine:
                     return str_field_value.strip().lower() == str_value_lower.strip()
                 elif condition_type == 'REGEX_MATCH':
                     return bool(re.search(str(value), str_field_value, re.IGNORECASE))
+
+                # --- MODIFIED: Amount comparison block ---
                 elif field == 'amount' and condition_type in ['GREATER_THAN', 'LESS_THAN', 'GREATER_THAN_OR_EQUAL', 'LESS_THAN_OR_EQUAL', 'RANGE_AMOUNT']:
                     try:
                         tx_amount = Decimal(str_field_value)
+
+                        # --- NEW: Convert to AMD if not AMD ---
                         if transaction.currency != 'AMD':
                             rate = self.rates_cache.get((transaction.transaction_date.date(), transaction.currency))
                             if rate is None:
+                                # Try to find closest previous rate (as in tax_report)
                                 closest_rate = ExchangeRate.objects.filter(
                                     currency_code=transaction.currency,
                                     date__lt=transaction.transaction_date.date()
                                 ).order_by('-date').first()
+
                                 if closest_rate:
                                     rate = closest_rate.rate
-                                    self.rates_cache[(transaction.transaction_date.date(), transaction.currency)] = rate
+                                    self.rates_cache[(transaction.transaction_date.date(), transaction.currency)] = rate # Cache for next time
                                 else:
                                     print(f"   [Rule Engine Warning] No exchange rate found for {transaction.currency} on {transaction.transaction_date.date()}. Rule will fail.")
-                                    return False
+                                    return False # Fail the rule if no rate
+
                             tx_amount = tx_amount * rate
+                        # --- END NEW ---
+
                         if condition_type == 'GREATER_THAN': num_value = Decimal(str(value)); return tx_amount > num_value
                         elif condition_type == 'LESS_THAN': num_value = Decimal(str(value)); return tx_amount < num_value
                         elif condition_type == 'GREATER_THAN_OR_EQUAL': num_value = Decimal(str(value)); return tx_amount >= num_value
@@ -114,86 +134,30 @@ class RulesEngine:
                             min_val = Decimal(min_val_str); max_val = Decimal(max_val_str); return min_val <= tx_amount <= max_val
                     except (InvalidOperation, ValueError, TypeError):
                         print(f"   [Rule Engine Warning] Invalid number for comparison: {condition}, Tx Value: {field_value_raw}"); return False
+                # --- END MODIFIED ---
+
                 elif condition_type in ['GREATER_THAN', 'LESS_THAN', 'GREATER_THAN_OR_EQUAL', 'LESS_THAN_OR_EQUAL', 'RANGE_AMOUNT'] and field != 'amount':
                      print(f"   [Rule Engine Warning] Numeric comparison '{condition_type}' on non-amount field '{field}'. Skipped: {condition}"); return False
                 else:
                     print(f"   [Rule Engine Warning] Unrecognized condition type '{condition_type}': {condition}"); return False
+
         except Exception as e:
             print(f"   [Rule Engine Error] Unexpected error evaluating condition: {condition}. Error: {e}"); traceback.print_exc(); return False
 
-
-    # --- NEW: Recursive function to evaluate a logic group ---
-    def _evaluate_logic_group(self, transaction: Transaction, group: dict) -> bool:
-        """
-        Evaluates a single group of conditions (e.g., "A AND B" or "C OR D").
-        """
-        logic = group.get('group_logic', 'AND').upper()
-        conditions = group.get('conditions', [])
-
-        if not conditions:
-            return False # An empty group is not a match
-
-        results = [self._evaluate_condition(transaction, cond) for cond in conditions]
-
-        if logic == 'AND':
-            return all(results)
-        elif logic == 'OR':
-            return any(results)
-
-        print(f"   [Rule Engine Warning] Unrecognized group logic '{logic}'. Defaulting to AND.")
-        return all(results)
-    # --- END NEW ---
-
-    # --- MODIFIED: _check_rule now supports both old and new JSON formats ---
     def _check_rule(self, transaction: Transaction, rule: TaxRule) -> bool:
-        """
-        Evaluates a full rule (groups of conditions) against a transaction.
-        Supports both new nested format and old flat format.
-        """
+        # ... (existing function) ...
         try:
-            conditions_json = rule.conditions_json
-        except (TypeError, json.JSONDecodeError):
-            print(f"   [Rule Engine Warning] Rule '{rule}' malformed JSON. Skipping."); return False
+            rule_conditions = rule.conditions_json
+            if not isinstance(rule_conditions, list): print(f"   [Rule Engine Warning] Rule '{rule}' invalid JSON structure. Skipping."); return False
+        except (TypeError, json.JSONDecodeError): print(f"   [Rule Engine Warning] Rule '{rule}' malformed JSON. Skipping."); return False
+        if not rule_conditions: return False
+        logic_block = rule_conditions[0]; logic = logic_block.get('logic', 'AND').upper(); checks = logic_block.get('checks', [])
+        if not checks: return False
+        results = [self._evaluate_condition(transaction, check) for check in checks]
+        if logic == 'AND': return all(results)
+        elif logic == 'OR': return any(results)
+        else: print(f"   [Rule Engine Warning] Rule '{rule}' unrecognized logic '{logic}'. Defaulting to AND."); return all(results)
 
-        if not conditions_json:
-            return False
-
-        # --- Backward Compatibility: Detect OLD flat format ---
-        # Old format: [{'logic': 'AND', 'checks': [...]}]
-        if isinstance(conditions_json, list) and conditions_json:
-            old_data = conditions_json[0]
-            if 'logic' in old_data and 'checks' in old_data:
-                # Convert old format to new format on-the-fly
-                conditions_json = {
-                    "root_logic": old_data['logic'],
-                    "groups": [
-                        {
-                            "group_logic": old_data['logic'], # Use same logic for the single group
-                            "conditions": old_data['checks']
-                        }
-                    ]
-                }
-        # --- End Backward Compatibility ---
-
-        # --- New Nested Logic ---
-        # New format: {"root_logic": "AND", "groups": [...]}
-        root_logic = conditions_json.get('root_logic', 'AND').upper()
-        groups = conditions_json.get('groups', [])
-
-        if not groups:
-            return False # No groups means no match
-
-        # Get the boolean result of each group
-        group_results = [self._evaluate_logic_group(transaction, group) for group in groups]
-
-        if root_logic == 'AND':
-            return all(group_results)
-        elif root_logic == 'OR':
-            return any(group_results)
-
-        print(f"   [Rule Engine Warning] Rule '{rule}' unrecognized root logic '{root_logic}'. Defaulting to AND.")
-        return all(group_results)
-    # --- END MODIFIED ---
 
     @transaction.atomic
     def run_analysis(self, assigned_user: User):
@@ -215,6 +179,7 @@ class RulesEngine:
         transactions_for_analysis = list({tx.pk: tx for tx in transactions_for_analysis}.values())
         print(f"   -> Found {len(transactions_for_analysis)} income transactions to analyze.")
 
+        # --- NEW: Pre-fetch exchange rates ---
         self.rates_cache = {}
         non_amd_txs = [tx for tx in transactions_for_analysis if tx.currency != 'AMD']
         if non_amd_txs:
@@ -227,6 +192,7 @@ class RulesEngine:
             )
             self.rates_cache = {(rate.date, rate.currency_code): rate.rate for rate in rates_qs}
             print(f"   -> Cached {len(self.rates_cache)} exchange rates for amount comparison.")
+        # --- END NEW ---
 
         transactions_to_update = []; unmatched_records_to_clear = []; newly_unmatched_transactions = []
         matched_count = 0
@@ -246,7 +212,6 @@ class RulesEngine:
                 if tx.matched_rule is not None or tx.declaration_point is not None:
                      tx.matched_rule = None; tx.declaration_point = None
                      transactions_to_update.append(tx)
-
         if transactions_to_update:
             updated_count = Transaction.objects.bulk_update(transactions_to_update, ['matched_rule', 'declaration_point'])
             print(f"   -> Updated {updated_count} transactions in database.")
@@ -294,6 +259,7 @@ class RulesEngine:
         transactions_for_analysis = list({tx.pk: tx for tx in transactions_for_analysis}.values())
         print(f"   -> Found {len(transactions_for_analysis)} transactions for New/Pending analysis.")
 
+        # --- NEW: Pre-fetch exchange rates ---
         self.rates_cache = {}
         non_amd_txs = [tx for tx in transactions_for_analysis if tx.currency != 'AMD']
         if non_amd_txs:
@@ -306,10 +272,12 @@ class RulesEngine:
             )
             self.rates_cache = {(rate.date, rate.currency_code): rate.rate for rate in rates_qs}
             print(f"   -> Cached {len(self.rates_cache)} exchange rates for amount comparison.")
+        # --- END NEW ---
 
         transactions_to_update = []; unmatched_records_to_clear = []; newly_unmatched_transactions = []
         matched_count = 0
         for tx in transactions_for_analysis:
+            # ... (rest of loop is unchanged) ...
             is_matched = False
             is_pending = hasattr(tx, 'unmatched_record')
 
@@ -327,6 +295,7 @@ class RulesEngine:
                      tx.matched_rule = None; tx.declaration_point = None
                      if tx not in transactions_to_update: transactions_to_update.append(tx)
 
+        # ... (rest of function is unchanged) ...
         if transactions_to_update:
             updated_count = Transaction.objects.bulk_update(transactions_to_update, ['matched_rule', 'declaration_point'])
             print(f"   -> Updated {updated_count} transactions in database.")

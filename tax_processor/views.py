@@ -43,15 +43,11 @@ def is_superadmin(user):
 def is_permitted_user(user):
     return user.is_authenticated and hasattr(user, 'profile') and user.profile.role in ['SUPERADMIN', 'REGULAR_USER']
 
+# --- Status Helper Function ---
 def _update_declaration_status(declaration_id):
-    """
-    Checks if all income transactions are assigned and updates declaration status.
-    Called after any action that might change transaction assignments.
-    """
     try:
         declaration = Declaration.objects.get(pk=declaration_id)
 
-        # We only care about unassigned INCOME transactions
         unassigned_count = Transaction.objects.filter(
             statement__declaration=declaration,
             declaration_point__isnull=True,
@@ -59,19 +55,17 @@ def _update_declaration_status(declaration_id):
         ).count()
 
         if unassigned_count == 0:
-            # If no unassigned items, and status is DRAFT, mark as complete
             if declaration.status == 'DRAFT':
                 declaration.status = 'ANALYSIS_COMPLETE'
                 declaration.save()
         else:
-            # If there are unassigned items, and status was complete, revert to draft
             if declaration.status == 'ANALYSIS_COMPLETE':
                 declaration.status = 'DRAFT'
                 declaration.save()
-            # If status is FILED, we leave it alone.
 
     except Declaration.DoesNotExist:
-        pass # Should not happen if called correctly
+        pass
+
 
 # -----------------------------------------------------------
 # 2. DATA INGESTION & DECLARATION MGMT
@@ -285,6 +279,24 @@ def run_analysis_pending(request, declaration_id):
         traceback.print_exc()
     return redirect('declaration_detail', declaration_id=declaration.pk)
 
+@user_passes_test(is_permitted_user)
+@require_POST
+def mark_declaration_filed(request, declaration_id):
+    declaration_qs = filter_declarations_by_user(request.user)
+    declaration = get_object_or_404(declaration_qs, pk=declaration_id)
+
+    if declaration.status == 'ANALYSIS_COMPLETE':
+        declaration.status = 'FILED'
+        declaration.save()
+        messages.success(request, f"Declaration '{declaration.name}' has been marked as FILED.")
+    elif declaration.status == 'FILED':
+        messages.warning(request, "Declaration is already marked as FILED.")
+    else:
+        messages.error(request, "Only declarations with status 'Analysis Complete' can be marked as Filed.")
+
+    return redirect('declaration_detail', declaration_id=declaration.pk)
+
+
 # -----------------------------------------------------------
 # 3. GLOBAL (CATEGORY) RULE MANAGEMENT
 # -----------------------------------------------------------
@@ -344,17 +356,15 @@ def rule_list_global(request):
     return render(request, 'tax_processor/rule_list.html', context)
 
 
-# --- MODIFIED: Changed decorator ---
+# --- MODIFIED: rule_create_or_update view ---
 @user_passes_test(is_permitted_user)
 def rule_create_or_update(request, rule_id=None, declaration_id=None):
-# --- END MODIFIED ---
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
     title = ""
     if is_specific_rule:
         declaration = get_object_or_404(Declaration, pk=declaration_id)
-        # This permission check is correct
         if not (is_superadmin(request.user) or declaration.created_by == request.user):
              messages.error(request, "You don't have permission to manage rules for this declaration.")
              return redirect('user_dashboard')
@@ -366,7 +376,6 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
         list_url_name = 'declaration_rule_list'
         url_kwargs = {'declaration_id': declaration_id}
     else:
-        # This permission check is correct
         if not is_superadmin(request.user):
             messages.error(request, "You need superadmin rights to manage global rules.")
             return redirect('user_dashboard')
@@ -392,26 +401,46 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
             else:
                  new_rule.declaration = None
 
-            checks = []
-            for check_form in formset.cleaned_data:
-                if check_form and not check_form.get('DELETE'):
-                    condition_type = check_form['condition_type']
+            # --- BUGFIX: Build Nested JSON from Groups ---
+            groups_dict = {}
+            # Iterate over formset.forms NOT cleaned_data
+            for form_instance in formset.forms:
+                if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
+                    data = form_instance.cleaned_data
+                    group_index = data.get('group_index', 0)
+
+                    if group_index not in groups_dict:
+                        groups_dict[group_index] = {
+                            'group_logic': request.POST.get(f'group-{group_index}-logic', 'AND'),
+                            'conditions': []
+                        }
+
+                    condition_type = data['condition_type']
+                    field = data['field']
                     value_to_save = None
 
                     if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                        value_to_save = check_form.get('value_field')
-                    elif check_form['field'] == 'statement__bank_name':
-                         value_to_save = check_form.get('value')
+                        value_to_save = data.get('value_field')
+                    elif field == 'statement__bank_name':
+                        # Get value from raw POST using the form's prefix
+                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
                     else:
-                        value_to_save = check_form.get('value')
+                        value_to_save = data.get('value')
 
-                    checks.append({
-                        'field': check_form['field'],
+                    groups_dict[group_index]['conditions'].append({
+                        'field': field,
                         'type': condition_type,
                         'value': value_to_save
                     })
 
-            new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+            # Filter out any empty groups that might result from deleted forms
+            groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
+
+            new_rule.conditions_json = {
+                'root_logic': request.POST.get('root_logic', 'AND'),
+                'groups': groups_list
+            }
+            # --- END BUGFIX ---
 
             if rule and rule.proposal_status == 'PENDING_GLOBAL' and not is_superadmin(request.user):
                  new_rule.proposal_status = 'NONE'
@@ -426,24 +455,41 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
     else: # GET request
         initial_form_data = {}; initial_formset_data = []
         if rule:
-            if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
-                logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
-                for check in logic_block.get('checks', []):
-                    condition_type = check.get('type')
-                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                        initial_formset_data.append({
-                            'field': check.get('field'),
-                            'condition_type': condition_type,
-                            'value_field': check.get('value')
-                        })
-                    else:
-                        initial_formset_data.append({
-                            'field': check.get('field'),
-                            'condition_type': condition_type,
-                            'value': check.get('value')
-                        })
-        else:
-            initial_form_data['logic'] = 'AND'
+            if rule.conditions_json:
+                try:
+                    conditions_data = rule.conditions_json
+                    if isinstance(conditions_data, str):
+                        conditions_data = json.loads(conditions_data)
+
+                    if 'groups' in conditions_data:
+                        for group_idx, group in enumerate(conditions_data.get('groups', [])):
+                            for check in group.get('conditions', []):
+                                check_data = {
+                                    'field': check.get('field'),
+                                    'condition_type': check.get('type'),
+                                    'group_index': group_idx
+                                }
+                                if check.get('type') in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                    check_data['value_field'] = check.get('value')
+                                else:
+                                    check_data['value'] = check.get('value')
+                                initial_formset_data.append(check_data)
+
+                    elif isinstance(conditions_data, list) and conditions_data:
+                        logic_block = conditions_data[0]
+                        for check in logic_block.get('checks', []):
+                            check_data = {
+                                'field': check.get('field'),
+                                'condition_type': check.get('type'),
+                                'group_index': 0
+                            }
+                            if check.get('type') in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                 check_data['value_field'] = check.get('value')
+                            else:
+                                 check_data['value'] = check.get('value')
+                            initial_formset_data.append(check_data)
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
 
         form = TaxRuleForm(instance=rule, initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
@@ -458,6 +504,7 @@ def rule_create_or_update(request, rule_id=None, declaration_id=None):
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/rule_form.html', context)
+# --- END MODIFIED ---
 
 
 @user_passes_test(is_permitted_user)
@@ -480,7 +527,6 @@ def rule_delete(request, rule_id, declaration_id=None):
     rule.delete()
     messages.success(request, f"Tax Rule '{rule_name}' successfully deleted.")
     return redirect(list_url_name, **url_kwargs)
-
 
 # -----------------------------------------------------------
 # 4. DECLARATION-SPECIFIC (CATEGORY) RULE LIST VIEW
@@ -544,7 +590,6 @@ def declaration_rule_list(request, declaration_id):
         'per_page': per_page, 'total_count': total_count, 'is_paginated': is_paginated
     }
     return render(request, 'tax_processor/declaration_rule_list.html', context)
-
 
 # -----------------------------------------------------------
 # 5. GLOBAL RULE PROPOSAL WORKFLOW
@@ -757,6 +802,7 @@ def review_queue(request, declaration_id=None):
     return render(request, 'tax_processor/review_queue.html', context)
 
 
+# --- MODIFIED: resolve_transaction view ---
 @user_passes_test(is_permitted_user)
 def resolve_transaction(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id)
@@ -770,87 +816,90 @@ def resolve_transaction(request, unmatched_id):
     if not (is_superadmin(request.user) or declaration.created_by == request.user):
         messages.error(request, "Դուք իրավասու չեք լուծելու այս գործարքը։")
         return redirect('user_dashboard')
+
     resolution_form_prefix = 'res'; rule_form_prefix = 'rule'; condition_formset_prefix = 'cond'
-    if request.method != 'POST':
-        resolution_form = ResolutionForm(initial={'unmatched_id': unmatched_id}, prefix=resolution_form_prefix)
-        suggested_rule_name = f"Rule based on: {tx.description[:50]}..."
-        initial_rule_data = {'rule_name': suggested_rule_name, 'priority': 50, 'is_active': True, 'logic': 'AND'}
-        rule_form = TaxRuleForm(initial=initial_rule_data, prefix=rule_form_prefix)
-        initial_condition_data = [{'field': 'description', 'condition_type': 'CONTAINS_KEYWORD', 'value': tx.description[:200]}]
-        condition_formset = BaseConditionFormSet(initial=initial_condition_data, prefix=condition_formset_prefix)
-    else:
+
+    if request.method == 'POST':
         resolution_form = ResolutionForm(request.POST, prefix=resolution_form_prefix)
         rule_form = TaxRuleForm(request.POST, prefix=rule_form_prefix)
         condition_formset = BaseConditionFormSet(request.POST, prefix=condition_formset_prefix)
+
         if resolution_form.is_valid():
             resolved_point_obj = resolution_form.cleaned_data['resolved_point']
             action = resolution_form.cleaned_data['rule_action']
             forms_are_valid = True
             try:
                 if action == 'create_specific':
-                    rule_name = request.POST.get(f'{rule_form_prefix}-rule_name', '').strip()
-                    priority_str = request.POST.get(f'{rule_form_prefix}-priority', '').strip()
-                    declaration_point_obj_for_rule = resolved_point_obj
-                    logic = request.POST.get(f'{rule_form_prefix}-logic', '').strip()
-                    if not rule_name:
-                        rule_form.add_error('rule_name', 'Կանոնի անվանումը պարտադիր է։')
+                    # We need to manually validate the rule_form parts that were
+                    # removed from the Django form object (like logic).
+                    # We also need to validate the formset.
+
+                    if not rule_form.is_valid():
                         forms_are_valid = False
-                    if not priority_str:
-                         rule_form.add_error('priority', 'Առաջնահերթությունը պարտադիր է։')
-                         forms_are_valid = False
-                    if declaration_point_obj_for_rule is None:
-                         messages.error(request, "Հայտարարագրման կետը պարտադիր է կանոնի համար։")
-                         forms_are_valid = False
-                    if not logic:
-                         rule_form.add_error('logic', 'Կանոնի տրամաբանությունը պարտադիր է։')
-                         forms_are_valid = False
+
                     if not condition_formset.is_valid():
                          messages.error(request, "Խնդրում ենք ուղղել սխալները կանոնի պայմաններում։")
                          forms_are_valid = False
-                    elif not any(form and not form.get('DELETE', False) for form in condition_formset.cleaned_data):
+                    elif not any(form and not form.get('DELETE', False) for form in condition_formset.forms if form.is_valid() and form.cleaned_data):
                          messages.error(request, "Կանոն ստեղծելու համար պետք է ավելացնել առնվազն մեկ պայման։")
                          forms_are_valid = False
-                    temp_data = rule_form.data.copy()
-                    temp_data[f'{rule_form_prefix}-declaration_point'] = declaration_point_obj_for_rule.pk if declaration_point_obj_for_rule else ''
-                    temp_rule_form_for_validation = TaxRuleForm(temp_data, prefix=rule_form_prefix)
-                    if forms_are_valid and not temp_rule_form_for_validation.is_valid():
-                         rule_form._errors = temp_rule_form_for_validation.errors
-                         forms_are_valid = False
+
                 if forms_are_valid:
                     with db_transaction.atomic():
                         tx.declaration_point = resolved_point_obj; tx.matched_rule = None
                         new_rule = None
                         if action == 'create_specific':
-                            temp_data = rule_form.data.copy()
-                            temp_data[f'{rule_form_prefix}-declaration_point'] = resolved_point_obj.pk
-                            final_rule_form = TaxRuleForm(temp_data, prefix=rule_form_prefix)
-                            if final_rule_form.is_valid() and condition_formset.is_valid():
-                                new_rule = final_rule_form.save(commit=False)
-                                new_rule.created_by = request.user
-                                new_rule.declaration = declaration
-                                new_rule.proposal_status = 'NONE'
-                                checks = []
-                                for check_form in condition_formset.cleaned_data:
-                                    if check_form and not check_form.get('DELETE'):
-                                        condition_type = check_form['condition_type']
-                                        value_to_save = None
-                                        if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                                            value_to_save = check_form.get('value_field')
-                                        else:
-                                            value_to_save = check_form.get('value')
-                                        checks.append({
-                                            'field': check_form['field'],
-                                            'type': condition_type,
-                                            'value': value_to_save
-                                        })
-                                new_rule.conditions_json = [{'logic': final_rule_form.cleaned_data['logic'], 'checks': checks}]
-                                new_rule.save()
-                                tx.matched_rule = new_rule
-                                messages.success(request, f"Գործարքը լուծված է։ Նոր հատուկ կանոն '{new_rule.rule_name}' ստեղծված է։")
-                            else:
-                                print("ERROR: Rule form/formset invalid during save attempt.")
-                                messages.error(request, "Internal validation error during rule save.")
-                                raise ValueError("Rule form/formset invalid during save.")
+                            # Manually assign the declaration_point, since it's not in the form
+                            new_rule = rule_form.save(commit=False)
+                            new_rule.declaration_point = resolved_point_obj
+
+                            new_rule.created_by = request.user
+                            new_rule.declaration = declaration
+                            new_rule.proposal_status = 'NONE'
+
+                            # --- BUGFIX: Build Nested JSON from Groups ---
+                            groups_dict = {}
+                            # Iterate over formset.forms NOT cleaned_data
+                            for form_instance in condition_formset.forms:
+                                if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
+                                    data = form_instance.cleaned_data
+                                    group_index = data.get('group_index', 0)
+
+                                    if group_index not in groups_dict:
+                                        groups_dict[group_index] = {
+                                            'group_logic': request.POST.get(f'group-{group_index}-logic', 'AND'),
+                                            'conditions': []
+                                        }
+
+                                    condition_type = data['condition_type']
+                                    field = data['field']
+                                    value_to_save = None
+
+                                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                        value_to_save = data.get('value_field')
+                                    elif field == 'statement__bank_name':
+                                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
+                                    else:
+                                        value_to_save = data.get('value')
+
+                                    groups_dict[group_index]['conditions'].append({
+                                        'field': field,
+                                        'type': condition_type,
+                                        'value': value_to_save
+                                    })
+
+                            groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
+
+                            new_rule.conditions_json = {
+                                'root_logic': request.POST.get('root_logic', 'AND'),
+                                'groups': groups_list
+                            }
+                            # --- END BUGFIX ---
+
+                            new_rule.save()
+                            tx.matched_rule = new_rule
+                            messages.success(request, f"Գործարքը լուծված է։ Նոր հատուկ կանոն '{new_rule.rule_name}' ստեղծված է։")
+
                         elif action == 'propose_global':
                             rule_notes = resolution_form.cleaned_data.get('rule_notes', '')
                             proposal_data = {'resolved_point_id': resolved_point_obj.pk, 'resolved_point_name': resolved_point_obj.name, 'notes': rule_notes, 'sample_description': tx.description, 'sample_amount': str(tx.amount),}
@@ -859,12 +908,14 @@ def resolve_transaction(request, unmatched_id):
                             messages.info(request, "Գործարքը լուծված է։ Նոր գլոբալ կանոն առաջարկված է Superadmin-ի վերանայման համար։")
                         else: # resolve_only
                             messages.success(request, "Գործարքը լուծված է։")
+
                         unmatched_item.status = 'RESOLVED' if action != 'propose_global' else 'NEW_RULE_PROPOSED'
                         unmatched_item.resolved_point = resolved_point_obj.name
                         unmatched_item.resolution_date = timezone.now()
                         if action != 'propose_global': unmatched_item.rule_proposal_json = None
                         unmatched_item.save()
                         tx.save()
+
                     _update_declaration_status(declaration.pk)
                     return redirect('declaration_detail', declaration_id=declaration.pk)
                 else:
@@ -876,11 +927,22 @@ def resolve_transaction(request, unmatched_id):
                  traceback.print_exc()
         else:
              messages.error(request, "Խնդրում ենք ուղղել լուծման ձևի սխալները։")
+
     if request.method != 'POST':
-        initial_form_data = {'rule_name': f"Rule based on: {tx.description[:50]}...", 'priority': 50, 'is_active': True, 'logic': 'AND'}
-        initial_condition_data = [{'field': 'description', 'condition_type': 'CONTAINS_KEYWORD', 'value': tx.description[:200]}]
-        rule_form = TaxRuleForm(initial=initial_form_data, prefix=rule_form_prefix)
+        resolution_form = ResolutionForm(initial={'unmatched_id': unmatched_id}, prefix=resolution_form_prefix)
+        suggested_rule_name = f"Rule based on: {tx.description[:50]}..."
+        initial_rule_data = {'rule_name': suggested_rule_name, 'priority': 50, 'is_active': True}
+        rule_form = TaxRuleForm(initial=initial_rule_data, prefix=rule_form_prefix)
+
+        initial_condition_data = [{
+            'field': 'description',
+            'condition_type': 'CONTAINS_KEYWORD',
+            'value': tx.description[:200],
+            'group_index': 0
+        }]
+
         condition_formset = BaseConditionFormSet(initial=initial_condition_data, prefix=condition_formset_prefix)
+
     context = {
         'unmatched_item': unmatched_item,
         'transaction': tx,
@@ -891,7 +953,7 @@ def resolve_transaction(request, unmatched_id):
         'is_admin': is_superadmin(request.user)
     }
     return render(request, 'tax_processor/resolve_transaction.html', context)
-
+# --- END MODIFIED ---
 
 # -----------------------------------------------------------
 # 7. TAX REPORT & PROPOSALS
@@ -1013,6 +1075,8 @@ def review_proposals(request):
     }
     return render(request, 'tax_processor/review_proposals.html', context)
 
+
+# --- MODIFIED: finalize_rule view ---
 @user_passes_test(is_superadmin)
 def finalize_rule(request, unmatched_id):
     unmatched_item = get_object_or_404(UnmatchedTransaction, pk=unmatched_id); transaction = unmatched_item.transaction
@@ -1028,25 +1092,44 @@ def finalize_rule(request, unmatched_id):
         if form.is_valid() and formset.is_valid():
             with db_transaction.atomic():
                 new_rule = form.save(commit=False); new_rule.created_by = request.user; new_rule.declaration = None
-                checks = [];
 
-                for check_form in formset.cleaned_data:
-                    if check_form and not check_form.get('DELETE'):
-                        condition_type = check_form['condition_type']
+                # --- BUGFIX: Build Nested JSON from Groups ---
+                groups_dict = {}
+                for form_instance in formset.forms:
+                    if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
+                        data = form_instance.cleaned_data
+                        group_index = data.get('group_index', 0)
+
+                        if group_index not in groups_dict:
+                            groups_dict[group_index] = {
+                                'group_logic': request.POST.get(f'group-{group_index}-logic', 'AND'),
+                                'conditions': []
+                            }
+
+                        condition_type = data['condition_type']
+                        field = data['field']
                         value_to_save = None
 
                         if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                            value_to_save = check_form.get('value_field')
+                            value_to_save = data.get('value_field')
+                        elif field == 'statement__bank_name':
+                            value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
                         else:
-                            value_to_save = check_form.get('value')
+                            value_to_save = data.get('value')
 
-                        checks.append({
-                            'field': check_form['field'],
+                        groups_dict[group_index]['conditions'].append({
+                            'field': field,
                             'type': condition_type,
                             'value': value_to_save
                         })
 
-                new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+                groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
+
+                new_rule.conditions_json = {
+                    'root_logic': request.POST.get('root_logic', 'AND'),
+                    'groups': groups_list
+                }
+                # --- END BUGFIX ---
 
                 try:
                     new_rule.save()
@@ -1066,8 +1149,15 @@ def finalize_rule(request, unmatched_id):
         return render(request, 'tax_processor/finalize_rule.html', context)
 
     else: # GET
-        initial_form_data = {'rule_name': f"AUTO_RULE: {unmatched_item.pk} - {proposed_category_name}", 'declaration_point': proposal_data.get('resolved_point_id'), 'priority': 50, 'is_active': True, 'logic': 'AND'}
-        initial_formset_data = [{'field': 'description', 'condition_type': 'CONTAINS_KEYWORD', 'value': proposal_data.get('sample_description', '')}]
+        initial_form_data = {'rule_name': f"AUTO_RULE: {unmatched_item.pk} - {proposed_category_name}", 'declaration_point': proposal_data.get('resolved_point_id'), 'priority': 50, 'is_active': True}
+
+        initial_formset_data = [{
+            'field': 'description',
+            'condition_type': 'CONTAINS_KEYWORD',
+            'value': proposal_data.get('sample_description', ''),
+            'group_index': 0
+        }]
+
         form = TaxRuleForm(initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
 
@@ -1079,6 +1169,7 @@ def finalize_rule(request, unmatched_id):
             'bank_names': BANK_NAMES_LIST
         }
         return render(request, 'tax_processor/finalize_rule.html', context)
+# --- END MODIFIED ---
 
 
 @require_POST
@@ -1161,7 +1252,7 @@ def all_transactions_list(request, declaration_id):
     queryset = queryset.order_by(sort_by)
 
     total_count = queryset.count()
-    default_per_page = 50 # Default 50 for this specific page
+    default_per_page = 50
     per_page = request.GET.get('per_page', default_per_page)
     is_paginated = True
 
@@ -1260,10 +1351,8 @@ def edit_transaction(request, transaction_id):
 # -----------------------------------------------------------
 # 9. EntityTypeRule Views
 # -----------------------------------------------------------
-# --- MODIFIED: Changed decorator ---
 @user_passes_test(is_permitted_user)
 def entity_rule_list(request, declaration_id=None):
-# --- END MODIFIED ---
     is_specific = declaration_id is not None
     declaration = None
     if is_specific:
@@ -1321,10 +1410,9 @@ def entity_rule_list(request, declaration_id=None):
     }
     return render(request, 'tax_processor/entity_rule_list.html', context)
 
-# --- MODIFIED: Changed decorator ---
+# --- MODIFIED: entity_rule_create_or_update view ---
 @user_passes_test(is_permitted_user)
 def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
-# --- END MODIFIED ---
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
@@ -1365,24 +1453,43 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
             else:
                  new_rule.declaration = None
 
-            checks = []
-            for check_form in formset.cleaned_data:
-                if check_form and not check_form.get('DELETE'):
-                    condition_type = check_form['condition_type']
+            # --- BUGFIX: Build Nested JSON from Groups ---
+            groups_dict = {}
+            for form_instance in formset.forms:
+                if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
+                    data = form_instance.cleaned_data
+                    group_index = data.get('group_index', 0)
+
+                    if group_index not in groups_dict:
+                        groups_dict[group_index] = {
+                            'group_logic': request.POST.get(f'group-{group_index}-logic', 'AND'),
+                            'conditions': []
+                        }
+
+                    condition_type = data['condition_type']
+                    field = data['field']
                     value_to_save = None
 
                     if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                        value_to_save = check_form.get('value_field')
+                        value_to_save = data.get('value_field')
+                    elif field == 'statement__bank_name':
+                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
                     else:
-                        value_to_save = check_form.get('value')
+                        value_to_save = data.get('value')
 
-                    checks.append({
-                        'field': check_form['field'],
+                    groups_dict[group_index]['conditions'].append({
+                        'field': field,
                         'type': condition_type,
                         'value': value_to_save
                     })
 
-            new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+            groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
+
+            new_rule.conditions_json = {
+                'root_logic': request.POST.get('root_logic', 'AND'),
+                'groups': groups_list
+            }
+            # --- END BUGFIX ---
 
             try:
                  new_rule.save()
@@ -1394,24 +1501,42 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
     else: # GET request
         initial_form_data = {}; initial_formset_data = []
         if rule:
-            if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
-                logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
-                for check in logic_block.get('checks', []):
-                    condition_type = check.get('type')
-                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                        initial_formset_data.append({
-                            'field': check.get('field'),
-                            'condition_type': condition_type,
-                            'value_field': check.get('value')
-                        })
-                    else:
-                        initial_formset_data.append({
-                            'field': check.get('field'),
-                            'condition_type': condition_type,
-                            'value': check.get('value')
-                        })
-        else:
-            initial_form_data['logic'] = 'AND'
+            if rule.conditions_json:
+                try:
+                    conditions_data = rule.conditions_json
+                    if isinstance(conditions_data, str):
+                        conditions_data = json.loads(conditions_data)
+
+                    if 'groups' in conditions_data:
+                        for group_idx, group in enumerate(conditions_data.get('groups', [])):
+                            for check in group.get('conditions', []):
+                                check_data = {
+                                    'field': check.get('field'),
+                                    'condition_type': check.get('type'),
+                                    'group_index': group_idx
+                                }
+                                if check.get('type') in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                    check_data['value_field'] = check.get('value')
+                                else:
+                                    check_data['value'] = check.get('value')
+                                initial_formset_data.append(check_data)
+
+                    elif isinstance(conditions_data, list) and conditions_data:
+                        logic_block = conditions_data[0]
+                        for check in logic_block.get('checks', []):
+                            check_data = {
+                                'field': check.get('field'),
+                                'condition_type': check.get('type'),
+                                'group_index': 0
+                            }
+                            if check.get('type') in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                 check_data['value_field'] = check.get('value')
+                            else:
+                                 check_data['value'] = check.get('value')
+                            initial_formset_data.append(check_data)
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
+
         form = EntityTypeRuleForm(instance=rule, initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
 
@@ -1423,6 +1548,7 @@ def entity_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'rule_type': 'entity'
     }
     return render(request, 'tax_processor/rule_form.html', context)
+# --- END MODIFIED ---
 
 @user_passes_test(is_permitted_user)
 @require_POST
@@ -1450,10 +1576,8 @@ def entity_rule_delete(request, rule_id, declaration_id=None):
 # -----------------------------------------------------------
 # 10. TransactionScopeRule Views
 # -----------------------------------------------------------
-# --- MODIFIED: Changed decorator ---
 @user_passes_test(is_permitted_user)
 def scope_rule_list(request, declaration_id=None):
-# --- END MODIFIED ---
     is_specific = declaration_id is not None
     declaration = None
     if is_specific:
@@ -1511,10 +1635,9 @@ def scope_rule_list(request, declaration_id=None):
     }
     return render(request, 'tax_processor/scope_rule_list.html', context)
 
-# --- MODIFIED: Changed decorator ---
+# --- MODIFIED: scope_rule_create_or_update view ---
 @user_passes_test(is_permitted_user)
 def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
-# --- END MODIFIED ---
     is_specific_rule = declaration_id is not None
     declaration = None
     rule = None
@@ -1553,24 +1676,43 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
             else:
                  new_rule.declaration = None
 
-            checks = []
-            for check_form in formset.cleaned_data:
-                if check_form and not check_form.get('DELETE'):
-                    condition_type = check_form['condition_type']
+            # --- BUGFIX: Build Nested JSON from Groups ---
+            groups_dict = {}
+            for form_instance in formset.forms:
+                if form_instance.is_valid() and form_instance.cleaned_data and not form_instance.cleaned_data.get('DELETE'):
+                    data = form_instance.cleaned_data
+                    group_index = data.get('group_index', 0)
+
+                    if group_index not in groups_dict:
+                        groups_dict[group_index] = {
+                            'group_logic': request.POST.get(f'group-{group_index}-logic', 'AND'),
+                            'conditions': []
+                        }
+
+                    condition_type = data['condition_type']
+                    field = data['field']
                     value_to_save = None
 
                     if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                        value_to_save = check_form.get('value_field')
+                        value_to_save = data.get('value_field')
+                    elif field == 'statement__bank_name':
+                        value_to_save = request.POST.get(f'{form_instance.prefix}-value_bank')
                     else:
-                        value_to_save = check_form.get('value')
+                        value_to_save = data.get('value')
 
-                    checks.append({
-                        'field': check_form['field'],
+                    groups_dict[group_index]['conditions'].append({
+                        'field': field,
                         'type': condition_type,
                         'value': value_to_save
                     })
 
-            new_rule.conditions_json = [{'logic': form.cleaned_data['logic'], 'checks': checks}]
+            groups_list = [group_data for group_data in groups_dict.values() if group_data['conditions']]
+
+            new_rule.conditions_json = {
+                'root_logic': request.POST.get('root_logic', 'AND'),
+                'groups': groups_list
+            }
+            # --- END BUGFIX ---
 
             try:
                  new_rule.save()
@@ -1582,24 +1724,42 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
     else: # GET request
         initial_form_data = {}; initial_formset_data = []
         if rule:
-            if rule.conditions_json and isinstance(rule.conditions_json, list) and len(rule.conditions_json) > 0 and rule.conditions_json[0]:
-                logic_block = rule.conditions_json[0]; initial_form_data['logic'] = logic_block.get('logic', 'AND')
-                for check in logic_block.get('checks', []):
-                    condition_type = check.get('type')
-                    if condition_type in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
-                        initial_formset_data.append({
-                            'field': check.get('field'),
-                            'condition_type': condition_type,
-                            'value_field': check.get('value')
-                        })
-                    else:
-                        initial_formset_data.append({
-                            'field': check.get('field'),
-                            'condition_type': condition_type,
-                            'value': check.get('value')
-                        })
-        else:
-            initial_form_data['logic'] = 'AND'
+            if rule.conditions_json:
+                try:
+                    conditions_data = rule.conditions_json
+                    if isinstance(conditions_data, str):
+                        conditions_data = json.loads(conditions_data)
+
+                    if 'groups' in conditions_data:
+                        for group_idx, group in enumerate(conditions_data.get('groups', [])):
+                            for check in group.get('conditions', []):
+                                check_data = {
+                                    'field': check.get('field'),
+                                    'condition_type': check.get('type'),
+                                    'group_index': group_idx
+                                }
+                                if check.get('type') in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                    check_data['value_field'] = check.get('value')
+                                else:
+                                    check_data['value'] = check.get('value')
+                                initial_formset_data.append(check_data)
+
+                    elif isinstance(conditions_data, list) and conditions_data:
+                        logic_block = conditions_data[0]
+                        for check in logic_block.get('checks', []):
+                            check_data = {
+                                'field': check.get('field'),
+                                'condition_type': check.get('type'),
+                                'group_index': 0
+                            }
+                            if check.get('type') in ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE']:
+                                 check_data['value_field'] = check.get('value')
+                            else:
+                                 check_data['value'] = check.get('value')
+                            initial_formset_data.append(check_data)
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
+
         form = TransactionScopeRuleForm(instance=rule, initial=initial_form_data)
         formset = BaseConditionFormSet(initial=initial_formset_data, prefix=formset_prefix)
 
@@ -1611,6 +1771,8 @@ def scope_rule_create_or_update(request, rule_id=None, declaration_id=None):
         'rule_type': 'scope'
     }
     return render(request, 'tax_processor/rule_form.html', context)
+# --- END MODIFIED ---
+
 
 @user_passes_test(is_permitted_user)
 @require_POST
@@ -1634,13 +1796,9 @@ def scope_rule_delete(request, rule_id, declaration_id=None):
     messages.success(request, f"Scope Rule '{rule_name}' successfully deleted.")
     return redirect(list_url_name, **url_kwargs)
 
-# -----------------------------------------------------------
-# 11. HINT VIEWS (NEW)
-# -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 @require_POST
 def dismiss_hint(request, hint_id):
-    # ... (existing view) ...
     hint_query = Q(pk=hint_id)
     if not is_superadmin(request.user):
         hint_query &= Q(declaration__created_by=request.user)
@@ -1653,22 +1811,3 @@ def dismiss_hint(request, hint_id):
     messages.info(request, f"Hint '{hint.title}' dismissed.")
 
     return redirect('review_queue_declaration', declaration_id=hint.declaration.id)
-
-# --- NEW: Mark as Filed View ---
-@user_passes_test(is_permitted_user)
-@require_POST
-def mark_declaration_filed(request, declaration_id):
-    declaration_qs = filter_declarations_by_user(request.user)
-    declaration = get_object_or_404(declaration_qs, pk=declaration_id)
-
-    # You can only file a complete declaration
-    if declaration.status == 'ANALYSIS_COMPLETE':
-        declaration.status = 'FILED'
-        declaration.save()
-        messages.success(request, f"Declaration '{declaration.name}' has been marked as FILED.")
-    elif declaration.status == 'FILED':
-        messages.warning(request, "Declaration is already marked as FILED.")
-    else:
-        messages.error(request, "Only declarations with status 'Analysis Complete' can be marked as Filed.")
-
-    return redirect('declaration_detail', declaration_id=declaration.pk)
