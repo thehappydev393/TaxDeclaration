@@ -195,7 +195,7 @@
                     {% for form in condition_formset %}
                     <div class="condition-form-row">
                         {{ form.group_index }}
-                        {% for hidden in form.hidden_fields %}{% if hidden.name|slice:"-group_index" != "-group-index" %}{{ hidden }}{% endif %}{% endfor %}
+                        {% for hidden in form.hidden_fields %}{% if hidden.name|slice:"-group_index" != "-group_index" %}{{ hidden }}{% endif %}{% endfor %}
                         <div>{{ form.field.label_tag }} {{ form.field }} {% for error in form.field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
                         <div>{{ form.condition_type.label_tag }} {{ form.condition_type }} {% for error in form.condition_type.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}</div>
 
@@ -215,6 +215,28 @@
                                     {% endfor %}
                                 </select>
                             </div>
+                            <div class="condition-value-entity-wrapper" style="display: none;">
+                                <label for="id_{{ form.prefix }}-value_entity">Արժեք</label>
+                                <select name="{{ form.prefix }}-value_entity" class="condition-value-entity form-control" id="id_{{ form.prefix }}-value_entity">
+                                    <option value="">---------</option>
+                                    {% for val, name in entity_choices %}
+                                    <option value="{{ val }}" {% if form.value.value == val %}selected{% endif %}>
+                                        {{ name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="condition-value-scope-wrapper" style="display: none;">
+                                <label for="id_{{ form.prefix }}-value_scope">Արժեք</label>
+                                <select name="{{ form.prefix }}-value_scope" class="condition-value-scope form-control" id="id_{{ form.prefix }}-value_scope">
+                                    <option value="">---------</option>
+                                    {% for val, name in scope_choices %}
+                                    <option value="{{ val }}" {% if form.value.value == val %}selected{% endif %}>
+                                        {{ name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
                             <div class="condition-value-field-wrapper" style="display: none;">
                                 {{ form.value_field.label_tag }} {{ form.value_field }}
                                 {% for error in form.value_field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
@@ -226,7 +248,9 @@
                         {% endif %}
                     </div>
                     {% endfor %}
-                </div> <button type="button" id="add-group-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայմանի Խումբ</button>
+                </div>
+
+                <button type="button" id="add-group-btn" class="btn btn-success" style="margin-top: 15px;">+ Ավելացնել Պայմանի Խումբ</button>
             </div>
         </div>
 
@@ -274,6 +298,24 @@
                     {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
                 </select>
             </div>
+            <div class="condition-value-entity-wrapper" style="display: none;">
+                <label for="id_{{ condition_formset.empty_form.prefix }}-value_entity">Արժեք</label>
+                <select name="{{ condition_formset.empty_form.prefix }}-value_entity" class="condition-value-entity form-control" id="id_{{ condition_formset.empty_form.prefix }}-value_entity">
+                    <option value="">---------</option>
+                    {% for val, name in entity_choices %}
+                    <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="condition-value-scope-wrapper" style="display: none;">
+                <label for="id_{{ condition_formset.empty_form.prefix }}-value_scope">Արժեք</label>
+                <select name="{{ condition_formset.empty_form.prefix }}-value_scope" class="condition-value-scope form-control" id="id_{{ condition_formset.empty_form.prefix }}-value_scope">
+                    <option value="">---------</option>
+                    {% for val, name in scope_choices %}
+                    <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="condition-value-field-wrapper" style="display: none;">
                 {{ condition_formset.empty_form.value_field.label_tag }} {{ condition_formset.empty_form.value_field }}
             </div>
@@ -310,6 +352,8 @@
         // --- Configuration ---
         const DYNAMIC_CONDITION_TYPES = ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE'];
         const BANK_FIELD_VALUE = 'statement__bank_name';
+        const ENTITY_FIELD_VALUE = 'entity_type';
+        const SCOPE_FIELD_VALUE = 'transaction_scope';
 
         // --- Element References ---
         const totalFormsInput = document.querySelector('input[name$="{{ condition_formset.prefix }}-TOTAL_FORMS"]');
@@ -332,33 +376,61 @@
             if (!row) return;
             const conditionTypeSelect = row.querySelector('.condition-type');
             const fieldSelect = row.querySelector('.condition-field');
+
             const valueTextWrapper = row.querySelector('.condition-value-input-wrapper');
             const valueBankWrapper = row.querySelector('.condition-value-select-wrapper');
+            const valueEntityWrapper = row.querySelector('.condition-value-entity-wrapper');
+            const valueScopeWrapper = row.querySelector('.condition-value-scope-wrapper');
             const valueFieldWrapper = row.querySelector('.condition-value-field-wrapper');
-            if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper) {
+
+            if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper || !valueEntityWrapper || !valueScopeWrapper) {
                 console.error("Could not find all required elements in formset row.", row);
                 return;
             }
             const conditionType = conditionTypeSelect.value;
             const fieldType = fieldSelect.value;
+
             const isDynamic = DYNAMIC_CONDITION_TYPES.includes(conditionType);
             const isBankField = (fieldType === BANK_FIELD_VALUE);
+            const isEntityField = (fieldType === ENTITY_FIELD_VALUE);
+            const isScopeField = (fieldType === SCOPE_FIELD_VALUE);
+
             valueFieldWrapper.style.display = isDynamic ? 'block' : 'none';
             valueBankWrapper.style.display = (!isDynamic && isBankField) ? 'block' : 'none';
-            valueTextWrapper.style.display = (!isDynamic && !isBankField) ? 'block' : 'none';
+            valueEntityWrapper.style.display = (!isDynamic && isEntityField) ? 'block' : 'none';
+            valueScopeWrapper.style.display = (!isDynamic && isScopeField) ? 'block' : 'none';
+            valueTextWrapper.style.display = (!isDynamic && !isBankField && !isEntityField && !isScopeField) ? 'block' : 'none';
+
             const valueTextInput = valueTextWrapper.querySelector('input');
             const valueBankSelect = valueBankWrapper.querySelector('select');
+            const valueEntitySelect = valueEntityWrapper.querySelector('select');
+            const valueScopeSelect = valueScopeWrapper.querySelector('select');
             const valueFieldSelect = valueFieldWrapper.querySelector('select');
-            if (!valueTextInput || !valueBankSelect || !valueFieldSelect) return;
+
+            if (!valueTextInput || !valueBankSelect || !valueEntitySelect || !valueScopeSelect || !valueFieldSelect) return;
+
             if (!valueTextInput.dataset.originalName) valueTextInput.dataset.originalName = valueTextInput.name;
             if (!valueBankSelect.dataset.originalName) valueBankSelect.dataset.originalName = valueBankSelect.name;
+            if (!valueEntitySelect.dataset.originalName) valueEntitySelect.dataset.originalName = valueEntitySelect.name;
+            if (!valueScopeSelect.dataset.originalName) valueScopeSelect.dataset.originalName = valueScopeSelect.name;
             if (!valueFieldSelect.dataset.originalName) valueFieldSelect.dataset.originalName = valueFieldSelect.name;
+
+            valueTextInput.name = '';
+            valueBankSelect.name = '';
+            valueEntitySelect.name = '';
+            valueScopeSelect.name = '';
+            valueFieldSelect.name = '';
+
             if (isDynamic) {
-                valueFieldSelect.name = valueFieldSelect.dataset.originalName; valueTextInput.name = ''; valueBankSelect.name = '';
+                valueFieldSelect.name = valueFieldSelect.dataset.originalName;
             } else if (isBankField) {
-                valueBankSelect.name = valueBankSelect.dataset.originalName; valueTextInput.name = ''; valueFieldSelect.name = '';
+                valueBankSelect.name = valueBankSelect.dataset.originalName;
+            } else if (isEntityField) {
+                valueEntitySelect.name = valueEntitySelect.dataset.originalName;
+            } else if (isScopeField) {
+                valueScopeSelect.name = valueScopeSelect.dataset.originalName;
             } else {
-                valueTextInput.name = valueTextInput.dataset.originalName; valueBankSelect.name = ''; valueFieldSelect.name = '';
+                valueTextInput.name = valueTextInput.dataset.originalName;
             }
         }
 
@@ -455,71 +527,42 @@
             }
         });
 
-        // --- Initialization ---
-        // ***** THIS IS THE FIX (Part 3) *****
-        // 1. Get all Django-rendered forms from the source container
+        // --- Initialization (Fix for Grouping Bug) ---
         const existingFormsContainer = document.getElementById('condition-form-list-source');
         const existingForms = Array.from(existingFormsContainer.querySelectorAll('.condition-form-row'));
 
-        // 2. Check for existing data (this page always starts with initial data)
-        let rootLogic = 'AND';
-        let initialGroups = {};
+        let initialRootLogic = 'AND'; // Default
+        let initialGroups = {0: 'AND'}; // Default
 
-        {% if rule_form.instance.pk and rule_form.instance.conditions_json %}
-        // This will run if editing a rule that was saved with nested logic
-        try {
-            const jsonData = JSON.parse({{ rule_form.instance.conditions_json|safe }});
-            if (jsonData.root_logic && jsonData.groups) {
-                rootLogic = jsonData.root_logic;
-                jsonData.groups.forEach((group, index) => {
-                    initialGroups[index] = group.group_logic;
-                });
-            }
-        } catch(e) {}
-        {% else %}
-        // This is for a new rule from a transaction
-        initialGroups[0] = 'AND';
-        {% endif %}
+        // This page always starts with at least one condition
+        // so we just need to create one group and move all forms into it.
 
-        rootLogicSelect.value = rootLogic;
+        rootLogicSelect.value = initialRootLogic;
         let groupElements = {};
 
-        // 3. Create all the groups
-        if (Object.keys(initialGroups).length > 0) {
-            for (const [index, logic] of Object.entries(initialGroups)) {
-                const newGroup = addGroup(logic);
-                groupElements[index] = newGroup;
-            }
+        // 1. Create the default group 0
+        const firstGroup = addGroup(initialGroups[0] || 'AND');
+        groupElements[0] = firstGroup;
+        const conditionContainer = firstGroup.querySelector('.condition-list-container');
+
+        // 2. Move existing forms into group 0
+        if (existingForms.length > 0) {
+            existingForms.forEach(row => {
+                const groupIndexInput = row.querySelector('.condition-group-index');
+                if (groupIndexInput) {
+                    groupIndexInput.value = 0; // Force all to group 0
+                }
+                conditionContainer.appendChild(row);
+                initializeConditionRow(row);
+            });
         } else {
-            // Failsafe: always create at least one group
-            groupElements[0] = addGroup('AND');
-        }
-
-        // 4. Move existing forms into their correct group
-        existingForms.forEach(row => {
-            const groupIndexInput = row.querySelector('.condition-group-index');
-            const groupIndex = groupIndexInput ? groupIndexInput.value : 0;
-
-            if (groupElements[groupIndex]) {
-                groupElements[groupIndex].querySelector('.condition-list-container').appendChild(row);
-                initializeConditionRow(row);
-            } else {
-                // This form's group doesn't exist, create it and add the row
-                const newGroup = addGroup('AND');
-                newGroup.querySelector('.condition-list-container').appendChild(row);
-                initializeConditionRow(row);
-                groupElements[groupIndex] = newGroup;
-            }
-        });
-
-        // If it was a new form and the existingForms list was empty (which it shouldn't be)
-        if (existingForms.length === 0) {
-            addCondition(groupElements[0], 0);
+            // Failsafe: If no forms were rendered (which is a bug), add one
+            addCondition(firstGroup, 0);
         }
 
         existingFormsContainer.remove(); // Clean up the source container
         updateRootLogicVisibility();
-        // ***** END THE FIX (Part 3) *****
+        // --- End Initialization Fix ---
 
 
         // --- Select2 Initialization ---

@@ -175,6 +175,28 @@
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="condition-value-entity-wrapper" style="display: none;">
+                            <label for="id_{{ form.prefix }}-value_entity">Արժեք</label>
+                            <select name="{{ form.prefix }}-value_entity" class="condition-value-entity form-control" id="id_{{ form.prefix }}-value_entity">
+                                <option value="">---------</option>
+                                {% for val, name in entity_choices %}
+                                <option value="{{ val }}" {% if form.value.value == val %}selected{% endif %}>
+                                    {{ name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="condition-value-scope-wrapper" style="display: none;">
+                            <label for="id_{{ form.prefix }}-value_scope">Արժեք</label>
+                            <select name="{{ form.prefix }}-value_scope" class="condition-value-scope form-control" id="id_{{ form.prefix }}-value_scope">
+                                <option value="">---------</option>
+                                {% for val, name in scope_choices %}
+                                <option value="{{ val }}" {% if form.value.value == val %}selected{% endif %}>
+                                    {{ name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
                         <div class="condition-value-field-wrapper" style="display: none;">
                             {{ form.value_field.label_tag }} {{ form.value_field }}
                             {% for error in form.value_field.errors %}<p class="errorlist">{{ error }}</p>{% endfor %}
@@ -231,7 +253,7 @@
 <script type="text/template" id="empty-condition-template">
     <div class="condition-form-row">
         {{ formset.empty_form.group_index }}
-        {% for hidden in formset.empty_form.hidden_fields %}{% if hidden.name|slice:"-group_index" != "-group-index" %}{{ hidden }}{% endif %}{% endfor %}
+        {% for hidden in formset.empty_form.hidden_fields %}{% if hidden.name|slice:"-group_index" != "-group_index" %}{{ hidden }}{% endif %}{% endfor %}
         <div>{{ formset.empty_form.field.label_tag }} {{ formset.empty_form.field }}</div>
         <div>{{ formset.empty_form.condition_type.label_tag }} {{ formset.empty_form.condition_type }}</div>
         <div class="condition-value-container">
@@ -243,6 +265,24 @@
                 <select name="{{ formset.empty_form.prefix }}-value_bank" class="condition-value-select-bank form-control" id="id_{{ formset.empty_form.prefix }}-value_select_bank">
                     <option value="">---------</option>
                     {% for bank_name in bank_names %} <option value="{{ bank_name }}">{{ bank_name }}</option> {% endfor %}
+                </select>
+            </div>
+            <div class="condition-value-entity-wrapper" style="display: none;">
+                <label for="id_{{ formset.empty_form.prefix }}-value_entity">Արժեք</label>
+                <select name="{{ formset.empty_form.prefix }}-value_entity" class="condition-value-entity form-control" id="id_{{ formset.empty_form.prefix }}-value_entity">
+                    <option value="">---------</option>
+                    {% for val, name in entity_choices %}
+                    <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="condition-value-scope-wrapper" style="display: none;">
+                <label for="id_{{ formset.empty_form.prefix }}-value_scope">Արժեք</label>
+                <select name="{{ formset.empty_form.prefix }}-value_scope" class="condition-value-scope form-control" id="id_{{ formset.empty_form.prefix }}-value_scope">
+                    <option value="">---------</option>
+                    {% for val, name in scope_choices %}
+                    <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="condition-value-field-wrapper" style="display: none;">
@@ -259,7 +299,6 @@
 </script>
 {{ form.instance.conditions_json|json_script:"rule-data-json" }}
 
-
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="{% static 'tax_processor/select2/select2.min.js' %}"></script>
 
@@ -267,7 +306,11 @@
     document.addEventListener('DOMContentLoaded', function() {
         // --- Configuration ---
         const DYNAMIC_CONDITION_TYPES = ['CONTAINS_FIELD_VALUE', 'NOT_CONTAINS_FIELD_VALUE', 'EQUALS_FIELD_VALUE'];
+        // --- NEW: Field constants ---
         const BANK_FIELD_VALUE = 'statement__bank_name';
+        const ENTITY_FIELD_VALUE = 'entity_type';
+        const SCOPE_FIELD_VALUE = 'transaction_scope';
+        // --- END NEW ---
 
         // --- Element References ---
         const totalFormsInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
@@ -290,33 +333,70 @@
             if (!row) return;
             const conditionTypeSelect = row.querySelector('.condition-type');
             const fieldSelect = row.querySelector('.condition-field');
+
+            // --- NEW: Get all value wrappers ---
             const valueTextWrapper = row.querySelector('.condition-value-input-wrapper');
             const valueBankWrapper = row.querySelector('.condition-value-select-wrapper');
+            const valueEntityWrapper = row.querySelector('.condition-value-entity-wrapper');
+            const valueScopeWrapper = row.querySelector('.condition-value-scope-wrapper');
             const valueFieldWrapper = row.querySelector('.condition-value-field-wrapper');
-            if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper) {
+            // --- END NEW ---
+
+            if (!conditionTypeSelect || !fieldSelect || !valueTextWrapper || !valueBankWrapper || !valueFieldWrapper || !valueEntityWrapper || !valueScopeWrapper) {
                 console.error("Could not find all required elements in formset row.", row);
                 return;
             }
             const conditionType = conditionTypeSelect.value;
             const fieldType = fieldSelect.value;
+
+            // --- NEW: Check field types ---
             const isDynamic = DYNAMIC_CONDITION_TYPES.includes(conditionType);
             const isBankField = (fieldType === BANK_FIELD_VALUE);
+            const isEntityField = (fieldType === ENTITY_FIELD_VALUE);
+            const isScopeField = (fieldType === SCOPE_FIELD_VALUE);
+            // --- END NEW ---
+
+            // --- NEW: Show/Hide logic ---
             valueFieldWrapper.style.display = isDynamic ? 'block' : 'none';
             valueBankWrapper.style.display = (!isDynamic && isBankField) ? 'block' : 'none';
-            valueTextWrapper.style.display = (!isDynamic && !isBankField) ? 'block' : 'none';
+            valueEntityWrapper.style.display = (!isDynamic && isEntityField) ? 'block' : 'none';
+            valueScopeWrapper.style.display = (!isDynamic && isScopeField) ? 'block' : 'none';
+            valueTextWrapper.style.display = (!isDynamic && !isBankField && !isEntityField && !isScopeField) ? 'block' : 'none';
+            // --- END NEW ---
+
+            // --- NEW: Name-swapping logic ---
             const valueTextInput = valueTextWrapper.querySelector('input');
             const valueBankSelect = valueBankWrapper.querySelector('select');
+            const valueEntitySelect = valueEntityWrapper.querySelector('select');
+            const valueScopeSelect = valueScopeWrapper.querySelector('select');
             const valueFieldSelect = valueFieldWrapper.querySelector('select');
+
             if (!valueTextInput.dataset.originalName) valueTextInput.dataset.originalName = valueTextInput.name;
             if (!valueBankSelect.dataset.originalName) valueBankSelect.dataset.originalName = valueBankSelect.name;
+            if (!valueEntitySelect.dataset.originalName) valueEntitySelect.dataset.originalName = valueEntitySelect.name;
+            if (!valueScopeSelect.dataset.originalName) valueScopeSelect.dataset.originalName = valueScopeSelect.name;
             if (!valueFieldSelect.dataset.originalName) valueFieldSelect.dataset.originalName = valueFieldSelect.name;
+
+            // Reset all names
+            valueTextInput.name = '';
+            valueBankSelect.name = '';
+            valueEntitySelect.name = '';
+            valueScopeSelect.name = '';
+            valueFieldSelect.name = '';
+
+            // Assign name to the correct visible element
             if (isDynamic) {
-                valueFieldSelect.name = valueFieldSelect.dataset.originalName; valueTextInput.name = ''; valueBankSelect.name = '';
+                valueFieldSelect.name = valueFieldSelect.dataset.originalName;
             } else if (isBankField) {
-                valueBankSelect.name = valueBankSelect.dataset.originalName; valueTextInput.name = ''; valueFieldSelect.name = '';
+                valueBankSelect.name = valueBankSelect.dataset.originalName;
+            } else if (isEntityField) {
+                valueEntitySelect.name = valueEntitySelect.dataset.originalName;
+            } else if (isScopeField) {
+                valueScopeSelect.name = valueScopeSelect.dataset.originalName;
             } else {
-                valueTextInput.name = valueTextInput.dataset.originalName; valueBankSelect.name = ''; valueFieldSelect.name = '';
+                valueTextInput.name = valueTextInput.dataset.originalName;
             }
+            // --- END NEW ---
         }
 
         /**
@@ -345,7 +425,6 @@
             tempDiv.innerHTML = newFormHtml;
             const newRow = tempDiv.firstElementChild;
 
-            // Set the hidden group_index field
             const groupIndexInput = newRow.querySelector('.condition-group-index');
             if (groupIndexInput) {
                 groupIndexInput.value = groupIndex;
@@ -372,36 +451,30 @@
 
             groupCounter++;
             updateRootLogicVisibility();
-            return newGroup; // Return the created group element
+            return newGroup;
         }
 
         /**
          * Shows the "AND/OR" for groups only if there is more than one group.
          */
         function updateRootLogicVisibility() {
-            // Count only visible groups
             const visibleGroups = conditionGroupList.querySelectorAll('.condition-group-box:not([style*="display: none"])').length;
             rootLogicContainer.style.display = visibleGroups > 1 ? 'flex' : 'none';
         }
 
         // --- Event Listeners ---
 
-        // 1. Add new group
         addGroupBtn.addEventListener('click', function() {
             const newGroup = addGroup('AND');
-            addCondition(newGroup, newGroup.dataset.groupIndex); // Add one default condition
+            addCondition(newGroup, newGroup.dataset.groupIndex);
         });
 
-        // 2. Delegate clicks within the group list
         conditionGroupList.addEventListener('click', function(e) {
-            // 2a. Add a new condition *to a group*
             if (e.target && e.target.classList.contains('btn-add-condition')) {
                 const groupElement = e.target.closest('.condition-group-box');
                 const groupIndex = groupElement.dataset.groupIndex;
                 addCondition(groupElement, groupIndex);
             }
-
-            // 2b. Remove a condition row
             if (e.target && (e.target.classList.contains('btn-remove-condition') || e.target.classList.contains('btn-remove'))) {
                 let row = e.target.closest('.condition-form-row');
                 let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
@@ -410,11 +483,8 @@
                 }
                 row.style.display = 'none';
             }
-
-            // 2c. Remove a whole group
             if (e.target && e.target.classList.contains('btn-remove-group')) {
                 let groupElement = e.target.closest('.condition-group-box');
-                // Mark all conditions inside for deletion
                 groupElement.querySelectorAll('.condition-form-row').forEach(row => {
                     let deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
                     if (deleteCheckbox) {
@@ -422,7 +492,6 @@
                     }
                     row.style.display = 'none';
                 });
-                // Hide the group box
                 groupElement.style.display = 'none';
                 updateRootLogicVisibility();
             }
@@ -430,13 +499,11 @@
 
         // --- Initialization ---
 
-        // 1. Find all Django-rendered forms
         const existingFormsContainer = document.getElementById('condition-form-list-source');
         const existingForms = Array.from(existingFormsContainer.querySelectorAll('.condition-form-row'));
 
-        // 2. Check if we are loading an existing rule (simple or nested)
         let rootLogic = 'AND';
-        let initialGroups = {}; // Stores { 0: 'AND', 1: 'OR', ... }
+        let initialGroups = {};
         let jsonData = null;
 
         {% if form.instance.pk %}
@@ -444,42 +511,32 @@
             const jsonDataRaw = document.getElementById('rule-data-json').textContent;
             jsonData = JSON.parse(jsonDataRaw || '{}');
 
-            // Check if it's NEW nested format
             if (jsonData && jsonData.root_logic && jsonData.groups) {
                 rootLogic = jsonData.root_logic;
                 jsonData.groups.forEach((group, index) => {
                     initialGroups[index] = group.group_logic;
                 });
             }
-            // Check if it's OLD flat format
             else if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].logic) {
                 rootLogic = jsonData[0].logic;
-                initialGroups[0] = jsonData[0].logic; // Only one group, logic is the root logic
+                initialGroups[0] = jsonData[0].logic;
             }
 
         } catch (e) { console.error('Could not parse initial JSON.', e); }
         {% endif %}
 
         rootLogicSelect.value = rootLogic;
-
-        // --- ***** THIS IS THE FIX (Part 3) ***** ---
-        // New, correct initialization logic
-
         let groupElements = {};
 
-        // 1. Create all the groups based on the parsed data
         if (Object.keys(initialGroups).length > 0) {
             for (const [index, logic] of Object.entries(initialGroups)) {
                 const newGroup = addGroup(logic);
                 groupElements[index] = newGroup;
             }
         } else {
-            // This is a brand new, empty rule. Add one default group.
-            const firstGroup = addGroup('AND');
-            groupElements[0] = firstGroup;
+            groupElements[0] = addGroup('AND');
         }
 
-        // 2. Move existing forms from the source list into their correct group
         existingForms.forEach(row => {
             const groupIndexInput = row.querySelector('.condition-group-index');
             const groupIndex = groupIndexInput ? groupIndexInput.value : 0;
@@ -488,27 +545,21 @@
                 groupElements[groupIndex].querySelector('.condition-list-container').appendChild(row);
                 initializeConditionRow(row);
             } else {
-                // This is a failsafe. If a condition says it belongs to group 5
-                // but only groups 0 and 1 exist, create group 5.
-                const newGroup = addGroup('AND'); // Default to AND
+                const newGroup = addGroup('AND');
                 newGroup.querySelector('.condition-list-container').appendChild(row);
                 initializeConditionRow(row);
                 groupElements[groupIndex] = newGroup;
             }
         });
 
-        // 3. If it was a new form (no existing forms), add one default condition
         if (existingForms.length === 0) {
             addCondition(groupElements[0], 0);
         }
 
-        // 4. Clean up the now-empty source container
         existingFormsContainer.remove();
-
         updateRootLogicVisibility();
-        // --- ***** END THE FIX (Part 3) ***** ---
 
-        // 3. Initialize Select2
+        // Initialize Select2
         var declarationPointSelect = document.getElementById('{{ form.declaration_point.id_for_label }}');
         if (declarationPointSelect) {
             $(declarationPointSelect).select2({

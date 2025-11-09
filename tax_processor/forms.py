@@ -5,10 +5,15 @@ from django.forms import formset_factory
 from datetime import date
 from .models import (
     Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction,
-    EntityTypeRule, TransactionScopeRule, Transaction # Make sure Transaction is imported
+    EntityTypeRule, TransactionScopeRule, Transaction
 )
 
-# ... (UnescapedTextarea, DeclarationPointChoiceField, StatementUploadForm are unchanged) ...
+# --- NEW: Export Model Choices ---
+ENTITY_CHOICES = Transaction.ENTITY_CHOICES
+SCOPE_CHOICES = Transaction.SCOPE_CHOICES
+# --- END NEW ---
+
+# --- (Helper Widgets and DeclarationPointChoiceField are unchanged) ---
 class UnescapedTextarea(forms.Textarea):
     def render(self, name, value, attrs=None, renderer=None):
         if value is None: value = ''; return super().render(name, value, attrs, renderer)
@@ -17,6 +22,7 @@ class DeclarationPointChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         description_preview = obj.description[:50]; return f"{obj.name} - {description_preview}..."
 
+# --- (StatementUploadForm is unchanged) ---
 class StatementUploadForm(forms.Form):
     client_name = forms.CharField(
         max_length=100,
@@ -84,7 +90,6 @@ DYNAMIC_FIELD_CHOICES = [
     ('description', 'Նկարագրություն (Description)'),
 ]
 
-# --- MODIFIED: ConditionForm ---
 class ConditionForm(forms.Form):
     field = forms.ChoiceField(
         choices=TRANSACTION_FIELD_CHOICES,
@@ -110,14 +115,12 @@ class ConditionForm(forms.Form):
     group_index = forms.IntegerField(
         widget=forms.HiddenInput(attrs={'class': 'condition-group-index'}),
         initial=0,
-        required=False  # <-- MODIFIED: Make not required
+        required=False
     )
-# --- END MODIFIED ---
 
 BaseConditionFormSet = formset_factory(ConditionForm, extra=0, can_delete=True)
 
 
-# --- (BaseRuleForm, TaxRuleForm, EntityTypeRuleForm, TransactionScopeRuleForm are unchanged) ---
 class BaseRuleForm(forms.ModelForm):
     rule_name = forms.CharField(
         max_length=255,
@@ -168,7 +171,6 @@ class TransactionScopeRuleForm(BaseRuleForm):
         model = TransactionScopeRule
         fields = ['rule_name', 'priority', 'scope_result', 'is_active']
 
-# --- (ResolutionForm, AddStatementsForm, TransactionEditForm are unchanged) ---
 class ResolutionForm(forms.Form):
     ACTION_CHOICES = [('resolve_only', 'Միայն Լուծել'), ('create_specific', 'Լուծել և Ստեղծել Հատուկ Կանոն'), ('propose_global', 'Լուծել և Առաջարկել Գլոբալ Կանոն'),]
     resolved_point = DeclarationPointChoiceField(queryset=DeclarationPoint.objects.all().order_by('name'), label="Վերջնական Հարկային Հայտարարագրման Կետ", help_text="Ընտրեք այն կատեգորիան, որին պետք է դասել այս գործարքը։")
