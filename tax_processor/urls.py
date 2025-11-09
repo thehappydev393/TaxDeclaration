@@ -15,6 +15,7 @@ urlpatterns = [
     path('report/<int:declaration_id>/', views.tax_report, name='tax_report'),
     path('declaration/<int:declaration_id>/transactions/', views.all_transactions_list, name='all_transactions_list'),
     path('transaction/<int:transaction_id>/edit/', views.edit_transaction, name='edit_transaction'),
+    path('declaration/<int:declaration_id>/mark_filed/', views.mark_declaration_filed, name='mark_declaration_filed'),
 
     # 3. Review Queues (Manual Resolution)
     path('review/', views.review_queue, name='review_queue'), # Global queue

@@ -138,6 +138,14 @@
             <a href="{% url 'tax_report' declaration_id=declaration.pk %}" class="btn btn-primary">
                 Դիտել Հարկային Հայտարարգիրը {# View Tax Report #}
             </a>
+            {% if declaration.status != 'FILED' %}
+            <form action="{% url 'mark_declaration_filed' declaration_id=declaration.pk %}" method="post" onsubmit="return confirm('Are you sure you want to mark this declaration as FILED? This should only be done after submitting to the tax authority.');">
+                {% csrf_token %}
+                <button type="submit" class="btn" style="background-color: #17a2b8; color: white; margin-top: 10px;">
+                    Նշել որպես «Հանձնված» (Mark as Filed)
+                </button>
+            </form>
+            {% endif %}
         </div>
     </div>
 

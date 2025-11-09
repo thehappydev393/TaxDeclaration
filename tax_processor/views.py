@@ -43,6 +43,36 @@ def is_superadmin(user):
 def is_permitted_user(user):
     return user.is_authenticated and hasattr(user, 'profile') and user.profile.role in ['SUPERADMIN', 'REGULAR_USER']
 
+def _update_declaration_status(declaration_id):
+    """
+    Checks if all income transactions are assigned and updates declaration status.
+    Called after any action that might change transaction assignments.
+    """
+    try:
+        declaration = Declaration.objects.get(pk=declaration_id)
+
+        # We only care about unassigned INCOME transactions
+        unassigned_count = Transaction.objects.filter(
+            statement__declaration=declaration,
+            declaration_point__isnull=True,
+            is_expense=False
+        ).count()
+
+        if unassigned_count == 0:
+            # If no unassigned items, and status is DRAFT, mark as complete
+            if declaration.status == 'DRAFT':
+                declaration.status = 'ANALYSIS_COMPLETE'
+                declaration.save()
+        else:
+            # If there are unassigned items, and status was complete, revert to draft
+            if declaration.status == 'ANALYSIS_COMPLETE':
+                declaration.status = 'DRAFT'
+                declaration.save()
+            # If status is FILED, we leave it alone.
+
+    except Declaration.DoesNotExist:
+        pass # Should not happen if called correctly
+
 # -----------------------------------------------------------
 # 2. DATA INGESTION & DECLARATION MGMT
 # -----------------------------------------------------------
@@ -123,6 +153,12 @@ def add_statements_to_declaration(request, declaration_id):
                         messages.success(request, f"Ֆայլ {uploaded_file.name}: {message}")
                     else:
                         messages.error(request, f"Ֆայլ {uploaded_file.name}: {message}")
+
+                if total_imported > 0 and declaration.status != 'DRAFT':
+                    declaration.status = 'DRAFT'
+                    declaration.save()
+                    messages.info(request, "New transactions added. Status reset to DRAFT.")
+
                 if total_imported > 0:
                     messages.success(request, f"Բեռնումն ավարտված է։ Ընդհանուր {total_imported} նոր գործարք ավելացվել է '{declaration.name}'-ին։")
                 elif files_processed > 0:
@@ -199,6 +235,8 @@ def run_declaration_analysis(request, declaration_id):
             hint_count = generate_analysis_hints(declaration.pk)
             messages.success(request, f"Generated {hint_count} new analysis hints.")
 
+        _update_declaration_status(declaration.pk)
+
     except Exception as e:
         messages.error(request, f"A critical error occurred during analysis: {e}")
         traceback.print_exc()
@@ -239,6 +277,8 @@ def run_analysis_pending(request, declaration_id):
             messages.info(request, "Running pattern analysis for hints...")
             hint_count = generate_analysis_hints(declaration.pk)
             messages.success(request, f"Generated {hint_count} new analysis hints.")
+
+        _update_declaration_status(declaration.pk)
 
     except Exception as e:
         messages.error(request, f"A critical error occurred during pending analysis: {e}")
@@ -825,6 +865,7 @@ def resolve_transaction(request, unmatched_id):
                         if action != 'propose_global': unmatched_item.rule_proposal_json = None
                         unmatched_item.save()
                         tx.save()
+                    _update_declaration_status(declaration.pk)
                     return redirect('declaration_detail', declaration_id=declaration.pk)
                 else:
                      messages.error(request, "Խնդրում ենք ուղղել նշված սխալները։")
@@ -1199,6 +1240,9 @@ def edit_transaction(request, transaction_id):
                     messages.success(request, f"Գործարքի հայտարարագրման կետը փոխվել է '{new_declaration_point.name if new_declaration_point else 'None'}'-ի։")
                 else:
                     messages.warning(request, "Փոփոխություններ չեն կատարվել։")
+
+                _update_declaration_status(declaration.pk)
+
             return redirect('all_transactions_list', declaration_id=declaration.pk)
         else:
              messages.error(request, "Խնդրում ենք ուղղել սխալները։")
@@ -1590,9 +1634,13 @@ def scope_rule_delete(request, rule_id, declaration_id=None):
     messages.success(request, f"Scope Rule '{rule_name}' successfully deleted.")
     return redirect(list_url_name, **url_kwargs)
 
+# -----------------------------------------------------------
+# 11. HINT VIEWS (NEW)
+# -----------------------------------------------------------
 @user_passes_test(is_permitted_user)
 @require_POST
 def dismiss_hint(request, hint_id):
+    # ... (existing view) ...
     hint_query = Q(pk=hint_id)
     if not is_superadmin(request.user):
         hint_query &= Q(declaration__created_by=request.user)
@@ -1605,3 +1653,22 @@ def dismiss_hint(request, hint_id):
     messages.info(request, f"Hint '{hint.title}' dismissed.")
 
     return redirect('review_queue_declaration', declaration_id=hint.declaration.id)
+
+# --- NEW: Mark as Filed View ---
+@user_passes_test(is_permitted_user)
+@require_POST
+def mark_declaration_filed(request, declaration_id):
+    declaration_qs = filter_declarations_by_user(request.user)
+    declaration = get_object_or_404(declaration_qs, pk=declaration_id)
+
+    # You can only file a complete declaration
+    if declaration.status == 'ANALYSIS_COMPLETE':
+        declaration.status = 'FILED'
+        declaration.save()
+        messages.success(request, f"Declaration '{declaration.name}' has been marked as FILED.")
+    elif declaration.status == 'FILED':
+        messages.warning(request, "Declaration is already marked as FILED.")
+    else:
+        messages.error(request, "Only declarations with status 'Analysis Complete' can be marked as Filed.")
+
+    return redirect('declaration_detail', declaration_id=declaration.pk)
