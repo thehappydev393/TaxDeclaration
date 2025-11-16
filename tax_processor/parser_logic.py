@@ -617,6 +617,7 @@ def normalize_transactions(
             "transactiondate",
             "օր",
             "հաշվառմանամսաթիվ",
+            "գործարքներայլգործառնություններգործարքիամսաթիվ",
             "գործարքներայլգործառնություններամսաթիվ",  # From log
             "transactionsotheroperationsdate",  # From log
             "date",  # From log
@@ -652,6 +653,7 @@ def normalize_transactions(
             "գործարքիգումարքարտիարժույթով_մուտք",
             "transactionamountintheaccountcurrency_in",
             "transactionamountintheaccountcurrencyin",
+            "գործարքիգումարըքարտիարժույթովմուտք",
         ],
         "explicit_outflow": [
             "գործարքիգումարhաշվիարժույթով_ելք",
@@ -659,6 +661,7 @@ def normalize_transactions(
             "գործարքիգումարքարտիարժույթով_ելք",
             "transactionamountintheaccountcurrency_out",
             "transactionamountintheaccountcurrencyout",
+            "գործարքիգումարըքարտիարժույթովելք",
         ],
         "credit": [
             "մուտքamd",
