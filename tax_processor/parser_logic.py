@@ -48,6 +48,9 @@ HEADER_KEYWORDS_AMOUNT = [
     "ելք",
     "daily balance",
 ]
+HEADER_KEYWORDS_FLOW = [
+    "income", "expense", "մուտք", "ելք", "credit", "debit", "in", "out", "inflow", "outflow"
+]
 MAX_HEADER_SEARCH_ROWS = 50
 
 UNIVERSAL_HEADERS = [
@@ -282,15 +285,24 @@ def find_header_start_index(
 
     for i, line in enumerate(lines):
         normalized_line = " ".join(line.lower().split())
+
+        # --- MODIFIED LOGIC (Check multi-row first) ---
         if any(parent in normalized_line for parent in MULTI_HEADER_PARENTS):
             if i + 1 < len(lines):
                 next_line = " ".join(lines[i + 1].lower().split())
                 if "մուտք" in next_line or "ելք" in next_line or "in" in next_line or "out" in next_line:
                     return i, True
+
+        # --- MODIFIED LOGIC (Use a more specific check for single-row) ---
         has_date = any(kw in normalized_line for kw in HEADER_KEYWORDS_DATE)
-        has_amount = any(kw in normalized_line for kw in HEADER_KEYWORDS_AMOUNT)
-        if has_date and has_amount:
+        # Check for specific flow keywords instead of broad 'amount' keywords
+        has_flow = any(kw in normalized_line for kw in HEADER_KEYWORDS_FLOW)
+
+        if has_date and has_flow:
+            # This is a much stronger signal for a real header row
             return i, False
+        # --- END MODIFICATION ---
+
     return -1, False
 
 
@@ -655,19 +667,35 @@ def normalize_transactions(
             "inflow",
             "կրեդիտ",
             "idbank_raw_credit_column",
+            "income", # <-- NEW
         ],
-        "debit": ["ելքamd", "ելք", "debit", "outflow", "դեբետ"],
+        "debit": [
+            "ելքamd",
+            "ելք",
+            "debit",
+            "outflow",
+            "դեբետ",
+            "expense", # <-- NEW
+        ],
         "single_amount_sign": [
             "գործարքիգումարքարտիարժույթով",
             "գործարքիգումարհաշվիարժույթով",
             "amount",
             "գործարքիգումարը",
         ],
-        "sender": ["շահառուվճարող", "շահառու", "վճարող", "sendername", "թղթակից"],
+        "sender": [
+            "շահառուվճարող",
+            "շահառու",
+            "վճարող",
+            "sendername",
+            "թղթակից",
+            "receiverpayer", # <-- NEW
+        ],
         "sender_account": [
             "շահառույիվճարողիհաշիվ",
             "հաշիվ",
             "accountnumber",
+            "receiverpayeraccount", # <-- NEW
         ],
     }
 
@@ -934,26 +962,44 @@ def normalize_transactions(
 
     # 7. Description, Sender, and Account Mapping
     # (Re-using desc_cols_found from step 0)
-    if desc_cols_found:
+    # --- START MODIFICATION (Fix 'DataFrame' object has no attribute 'str') ---
+    description_series = pd.Series(dtype=str)
+
+    if len(desc_cols_found) == 1:
+        # Case 1: Exactly one description column found.
+        # Select it directly as a Series (this is much safer).
+        col_name = desc_cols_found[0]
+        print(f"   -> Description logic: Using 1 description column ('{col_name}').")
+        description_series = df.loc[universal_df.index, col_name].astype(str).fillna("")
+
+    elif len(desc_cols_found) > 1:
+        # Case 2: Multiple description columns found.
+        # Use .apply() to join them into a Series.
         print(
             f"   -> Description logic: Combining {len(desc_cols_found)} "
             f"description column(s)."
         )
         description_data = df.loc[universal_df.index, desc_cols_found].astype(str).copy()
         description_data.replace("nan", "", inplace=True)
-        universal_df["Description"] = (
-            description_data.apply(
-                lambda row: " ".join(row.values).strip(), axis=1
-            )
-            .str.replace("_x000D_", " ", regex=False)
-            .str.replace(r"\s{2,}", " ", regex=True)
+        description_series = description_data.apply(
+            lambda row: " ".join(row.values).strip(), axis=1
         )
     else:
-        universal_df["Description"] = create_placeholder()
+        # Case 3: No description columns found.
         print(
             "   ❌ Description logic: Could not find any recognized "
             "description column."
         )
+        description_series = create_placeholder()
+
+    # Now, 'description_series' is *guaranteed* to be a Series
+    # (even if it's empty), so the .str accessor is safe.
+    universal_df["Description"] = (
+        description_series
+        .str.replace("_x000D_", " ", regex=False)
+        .str.replace(r"\s{2,}", " ", regex=True)
+    )
+    # --- END MODIFICATION ---
 
     sender_col = find_column(column_maps["sender"])
     universal_df["Sender"] = (
