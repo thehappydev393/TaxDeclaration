@@ -276,6 +276,8 @@ def find_header_start_index(
         "գործարքի գումար հաշվի արժույթով",
         "գործարքի գումար քարտի արժույթով",
         "գործարքի գումար",
+        "transactions, other operations",
+        "transaction amount in the account currency",
     ]
 
     for i, line in enumerate(lines):
@@ -283,7 +285,7 @@ def find_header_start_index(
         if any(parent in normalized_line for parent in MULTI_HEADER_PARENTS):
             if i + 1 < len(lines):
                 next_line = " ".join(lines[i + 1].lower().split())
-                if "մուտք" in next_line or "ելք" in next_line:
+                if "մուտք" in next_line or "ելք" in next_line or "in" in next_line or "out" in next_line:
                     return i, True
         has_date = any(kw in normalized_line for kw in HEADER_KEYWORDS_DATE)
         has_amount = any(kw in normalized_line for kw in HEADER_KEYWORDS_AMOUNT)
@@ -604,6 +606,8 @@ def normalize_transactions(
             "օր",
             "հաշվառմանամսաթիվ",
             "գործարքներայլգործառնություններամսաթիվ",  # From log
+            "transactionsotheroperationsdate",  # From log
+            "date",  # From log
         ],
         "provision_date": [
             "ձևակերպմանհաշվարկիապահովմանամսաթիվ",
@@ -619,6 +623,7 @@ def normalize_transactions(
             "գործարքինկարագրություն",
             "գործարքինկարագրությունunnamed17level1",  # From log
             "գործարքնկարագիր",
+            "transactiondescription",
         ],
         "transaction_place": ["գործարքիվայրը", "գործարքիվայրը1"],
         "currency_col": [
@@ -627,16 +632,21 @@ def normalize_transactions(
             "քարտիարժույթով",
             "հաշվիարժույթով",
             "գործարքներայլգործառնություններարժույթ",
+            "transactionsotheroperationscurrency",
         ],
         "explicit_inflow": [
             "գործարքիգումարhաշվիարժույթով_մուտք",
             "գործարքիգումարըքարտիարժույթով_մուտք",
             "գործարքիգումարքարտիարժույթով_մուտք",
+            "transactionamountintheaccountcurrency_in",
+            "transactionamountintheaccountcurrencyin",
         ],
         "explicit_outflow": [
             "գործարքիգումարhաշվիարժույթով_ելք",
             "գործարքիգումարըքարտիարժույթով_ելք",
             "գործարքիգումարքարտիարժույթով_ելք",
+            "transactionamountintheaccountcurrency_out",
+            "transactionamountintheaccountcurrencyout",
         ],
         "credit": [
             "մուտքamd",
