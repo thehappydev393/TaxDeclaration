@@ -4,8 +4,8 @@ import io
 import os
 import traceback  # Added for the except block
 
-import pandas as pd
-from django.conf import settings  # Added for DEBUG check
+import pandas as pd  # Third-party
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -56,12 +56,11 @@ def import_statement_service(
                 search_content = file_content_for_search
 
             bank_name = identify_bank_from_text(search_content)
-            header_index = find_header_start_index(
-                file_content_for_search, ext
-            )
+            (
+                header_index,
+                is_multi_row,
+            ) = find_header_start_index(file_content_for_search, ext)
 
-            # --- Validation (MODIFIED) ---
-            # Only run owner validation if we are NOT in DEBUG mode
             if not settings.DEBUG:
                 is_owner_valid = validate_statement_owner(
                     file_content_for_search,
@@ -77,11 +76,9 @@ def import_statement_service(
                         f"the file {filename}.",
                     )
             else:
-                # If in DEBUG mode, skip validation and log it
                 print(
                     f"DEBUG mode: Skipping owner validation for {filename}."
                 )
-            # --- End Modification ---
 
             if ext in (".xls", ".xlsx"):
                 content_source = io.BytesIO(file_content)
@@ -94,11 +91,17 @@ def import_statement_service(
                 ext,
                 bank_name,
                 header_index,
+                is_multi_row,
                 filename,
             )
             df_universal = normalize_transactions(
                 df_transactions, bank_name, filename
             )
+
+            # --- START MODIFICATION (Total Count Debug) ---
+            print(f"   [DEBUG] Total rows read by pandas: {len(df_transactions)}")
+            print(f"   [DEBUG] Total rows after normalization: {len(df_universal)}")
+            # --- END MODIFICATION ---
 
             if df_universal.empty:
                 return (
@@ -133,6 +136,14 @@ def import_statement_service(
                         sender=row["Sender"],
                         sender_account=row["Sender account number"],
                         is_expense=row["is_expense"],
+                        # --- START MODIFICATION ---
+                        # Use .get() for safety, though it should exist
+                        excel_row_number=(
+                            row.get("excel_row_number")
+                            if pd.notna(row.get("excel_row_number"))
+                            else None
+                        ),
+                        # --- END MODIFICATION ---
                     )
                 )
 

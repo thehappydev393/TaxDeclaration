@@ -114,6 +114,11 @@
     <table>
         <thead>
         <tr>
+            <th>
+                Excel
+                <br />
+                Row
+            </th>
             <th> {# Date #}
                 <a href="?sort={% if current_sort == 'transaction_date' %}-{% endif %}transaction_date&{{ get_params }}"
                    class="{% if 'transaction_date' in current_sort %}{% if '-' in current_sort %}sort-desc{% else %}sort-asc{% endif %}{% endif %}">
@@ -170,6 +175,9 @@
         <tbody>
         {% for tx in page_obj %}
         <tr>
+            <td style="text-align: center; color: #6c757d; font-size: 0.9em;">
+                {{ tx.excel_row_number|add:1 }}
+            </td>
             <td nowrap>{{ tx.transaction_date|date:"Y-m-d H:i" }}</td>
             <td class="{% if tx.is_expense %}type-expense{% else %}type-income{% endif %}">
                 {% if tx.is_expense %}Ելք{% else %}Մուտք{% endif %}

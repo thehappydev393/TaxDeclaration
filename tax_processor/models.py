@@ -170,6 +170,15 @@ class Transaction(models.Model):
     sender_account = models.CharField(max_length=50, blank=True, null=True)
     is_expense = models.BooleanField(default=False, verbose_name="Is Expense (Outgoing)")
 
+    excel_row_number = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Excel Row Number",
+        help_text=(
+            "The 0-based row index from the source Excel file, for debugging."
+        ),
+    )
+
     # Analysis Result
     matched_rule = models.ForeignKey(TaxRule, on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions')
     declaration_point = models.ForeignKey(
