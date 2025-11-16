@@ -135,6 +135,7 @@ def import_statement_service(
                         description=row["Description"],
                         sender=row["Sender"],
                         sender_account=row["Sender account number"],
+                        transaction_place=row["Transaction_Place"],
                         is_expense=row["is_expense"],
                         # --- START MODIFICATION ---
                         # Use .get() for safety, though it should exist

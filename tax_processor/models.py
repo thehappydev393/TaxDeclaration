@@ -168,6 +168,12 @@ class Transaction(models.Model):
     description = models.TextField()
     sender = models.CharField(max_length=255)
     sender_account = models.CharField(max_length=50, blank=True, null=True)
+    transaction_place = models.CharField(
+            max_length=255,
+            blank=True,
+            null=True,
+            verbose_name="Transaction Place"
+        )
     is_expense = models.BooleanField(default=False, verbose_name="Is Expense (Outgoing)")
 
     excel_row_number = models.IntegerField(
