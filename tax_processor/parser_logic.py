@@ -179,6 +179,35 @@ MONTH_YEAR_REGEX = re.compile(rf"({CHAR_SET})[\s,]+(\d{{4}})", re.IGNORECASE)
 DAY_MONTH_REGEX = re.compile(rf"(\d{{1,2}})[\s,]+({CHAR_SET})", re.IGNORECASE)
 MONTH_DAY_REGEX = re.compile(rf"({CHAR_SET})[\s,]+(\d{{1,2}})", re.IGNORECASE)
 
+# --- START NEW: Transliteration Map for Validation ---
+ARMENIAN_TO_LATIN_MAP = {
+    # Lowercase
+    'ա': 'a', 'բ': 'b', 'գ': 'g', 'դ': 'd', 'ե': 'e', 'զ': 'z', 'է': 'e', 'ը': 'y',
+    'թ': 't', 'ժ': 'zh', 'ի': 'i', 'լ': 'l', 'խ': 'kh', 'ծ': 'ts', 'կ': 'k', 'հ': 'h',
+    'ձ': 'dz', 'ղ': 'gh', 'ճ': 'ch', 'մ': 'm', 'յ': 'y', 'ն': 'n', 'շ': 'sh', 'ո': 'o',
+    'չ': 'ch', 'պ': 'p', 'ջ': 'j', 'ռ': 'r', 'ս': 's', 'վ': 'v', 'տ': 't', 'ր': 'r',
+    'ց': 'c', 'ու': 'u', 'փ': 'p', 'ք': 'q', 'օ': 'o', 'ֆ': 'f', 'և': 'ev',
+    # Uppercase
+    'Ա': 'A', 'Բ': 'B', 'Գ': 'G', 'Դ': 'D', 'Ե': 'E', 'Զ': 'Z', 'Է': 'E', 'Ը': 'Y',
+    'Թ': 'T', 'Ժ': 'Zh', 'Ի': 'I', 'Լ': 'L', 'Խ': 'Kh', 'Ծ': 'Ts', 'Կ': 'K', 'Հ': 'H',
+    'Ձ': 'Dz', 'Ղ': 'Gh', 'Ճ': 'Ch', 'Մ': 'M', 'Յ': 'Y', 'Ն': 'N', 'Շ': 'Sh', 'Ո': 'O',
+    'Չ': 'Ch', 'Պ': 'P', 'Ջ': 'J', 'Ռ': 'R', 'Ս': 'S', 'Վ': 'V', 'Տ': 'T', 'Ր': 'R',
+    'Ց': 'C', 'ՈՒ': 'U', 'Փ': 'P', 'Ք': 'Q', 'Օ': 'O', 'Ֆ': 'F', 'ԵՎ': 'EV'
+}
+
+def _transliterate_to_latin(text: str) -> str:
+    """
+    Simple transliteration for Armenian names to Latin for validation.
+    """
+    # Handle digraphs first
+    text = text.replace('ու', 'u').replace('ՈՒ', 'U')
+    text = text.replace('և', 'ev').replace('ԵՎ', 'EV')
+
+    transliterated = ""
+    for char in text:
+        transliterated += ARMENIAN_TO_LATIN_MAP.get(char, char)
+    return transliterated
+# --- END NEW ---
 
 # ------------------------------------------------------------------------
 # Helper Functions
@@ -346,12 +375,34 @@ def validate_statement_owner(
         content_str = " ".join(content_for_search).lower()
     else:
         content_str = content_for_search.lower()
-    fn = client_first_name.lower()
-    ln = client_last_name.lower()
-    if fn in content_str and ln in content_str:
+
+    # --- START MODIFICATION ---
+
+    # 1. Original names (e.g., Armenian)
+    fn_orig = client_first_name.lower()
+    ln_orig = client_last_name.lower()
+
+    # Check for original names
+    if fn_orig in content_str and ln_orig in content_str:
         return True
-    print(f"   [Validation Error] Client '{fn} {ln}' not found in statement.")
+
+    # 2. Transliterated names (e.g., English/Latin)
+    fn_latin = _transliterate_to_latin(client_first_name).lower()
+    ln_latin = _transliterate_to_latin(client_last_name).lower()
+
+    # Avoid re-checking if transliteration is identical (e.g., name was already in Latin)
+    if fn_latin == fn_orig and ln_latin == ln_orig:
+        print(f"   [Validation Error] Client '{fn_orig} {ln_orig}' not found in statement.")
+        return False
+
+    # Check for transliterated names
+    if fn_latin in content_str and ln_latin in content_str:
+        return True
+
+    # 3. If neither matched, print a comprehensive error and fail
+    print(f"   [Validation Error] Client '{fn_orig} {ln_orig}' (or '{fn_latin} {ln_latin}') not found in statement.")
     return False
+    # --- END MODIFICATION ---
 
 
 # ------------------------------------------------------------------------
