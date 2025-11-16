@@ -626,6 +626,7 @@ def normalize_transactions(
             "currency",
             "քարտիարժույթով",
             "հաշվիարժույթով",
+            "գործարքներայլգործառնություններարժույթ",
         ],
         "explicit_inflow": [
             "գործարքիգումարhաշվիարժույթով_մուտք",
@@ -676,6 +677,18 @@ def normalize_transactions(
         "%d/%m/%Y %H:%M",
     ]
 
+    # --- START MODIFICATION (Fix Date Bug - V2) ---
+    DATE_FORMATS = [
+        "%Y-%m-%d %H:%M:%S",
+        "%d.%m.%Y",
+        "%d.%m.%Y %H:%M:%S",
+        "%m/%d/%Y",  # <-- This was the format my last fix broke
+        "%m/%d/%Y %H:%M:%S", # <-- This one too
+        "%Y.%m.%d",
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M",
+    ]
+
     def robust_date_parser(col):
         # Create a working copy
         s = col.astype(str).str.strip()
@@ -684,33 +697,54 @@ def normalize_transactions(
         s = s.str.replace(r"([/\.])00(\d{2})\b", r"\g<1>20\g<2>", regex=True)
         # --- END FIX ---
 
-        parsed_dates = pd.NaT
-        for fmt in DATE_FORMATS:
-            # We parse as naive first
-            parsed_dates = pd.to_datetime(s, format=fmt, errors="coerce")
-            if not parsed_dates.isna().all():
-                # Found format, return naive series
-                return parsed_dates
-        try:
-            # Try numeric conversion for Excel float dates
-            numeric_col = pd.to_numeric(s, errors="coerce")
-            if not numeric_col.isna().any() and numeric_col.max() > 40000:
-                valid_indices = ~numeric_col.isna()
-                dates_as_floats = numeric_col[valid_indices]
-                converted_dates = pd.to_datetime(
-                    dates_as_floats, unit="D", origin="1899-12-30", errors="coerce"
-                )
-                # Create a result series
-                result = pd.Series(pd.NaT, index=col.index, dtype="datetime64[ns]")
-                result.loc[valid_indices] = converted_dates.values
-                return result
-        except:
-            pass
+        # Initialize an empty series to hold our results
+        parsed_dates = pd.Series(pd.NaT, index=s.index, dtype="datetime64[ns]")
 
-        # Fallback for any other format
-        return pd.to_datetime(
-            s, errors="coerce", dayfirst=True
-        )
+        # Attempt 1: Loop through all known strict formats and fill in matches
+        for fmt in DATE_FORMATS:
+            # Parse only the rows that haven't been matched yet
+            unmatched_indices = parsed_dates.isna()
+            if not unmatched_indices.any():
+                break  # All dates are parsed, stop looping
+
+            # Try to parse the remaining rows with the current format
+            current_pass = pd.to_datetime(s[unmatched_indices], format=fmt, errors="coerce")
+
+            # Update our main series with the new, valid dates from this pass
+            # This is the key: we .fillna() instead of returning the whole series
+            parsed_dates.loc[unmatched_indices] = parsed_dates.loc[unmatched_indices].fillna(current_pass)
+
+        # Attempt 2: Find rows that *still* failed and try Excel float conversion
+        failed_indices = parsed_dates.isna()
+        if failed_indices.any():
+            try:
+                # Only attempt numeric conversion on the failed rows
+                numeric_col = pd.to_numeric(s[failed_indices], errors="coerce")
+
+                # Check for valid Excel date range (e.g., 1982 to 2064)
+                # (using min/max to avoid converting row numbers by mistake)
+                if not numeric_col.isna().all() and numeric_col.min() > 30000 and numeric_col.max() < 60000:
+                    valid_float_indices = numeric_col.dropna().index
+                    dates_as_floats = numeric_col[valid_float_indices]
+
+                    converted_dates = pd.to_datetime(
+                        dates_as_floats, unit="D", origin="1899-12-30", errors="coerce"
+                    )
+
+                    # Fill in the NaT values with the new float-parsed dates
+                    parsed_dates.loc[valid_float_indices] = converted_dates.values
+            except Exception:
+                pass # Ignore if float conversion fails
+
+        # Attempt 3: Final fallback for any other format pandas can guess (but only for remaining NaTs)
+        failed_indices = parsed_dates.isna()
+        if failed_indices.any():
+             # We use dayfirst=True as the final guess, as it's more common in this context
+             final_pass = pd.to_datetime(s[failed_indices], errors="coerce", dayfirst=True)
+             parsed_dates.loc[failed_indices] = parsed_dates.loc[failed_indices].fillna(final_pass)
+
+        # Return the combined series
+        return parsed_dates
     # --- END MODIFICATION ---
 
     if transaction_date_col:
