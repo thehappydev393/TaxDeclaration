@@ -339,6 +339,7 @@ class AnalysisHint(models.Model):
         ('SENDER', 'Frequent Sender'),
         ('DESCRIPTION', 'Similar Description'),
         ('AMOUNT', 'Large Amount'),
+        ('AI_SUGGESTION', 'AI Suggestion'),
     )
     hint_type = models.CharField(max_length=20, choices=HINT_TYPES)
     title = models.CharField(max_length=255) # e.g., "Frequent Sender: John Smith"
