@@ -5,6 +5,7 @@ import os
 import gc
 import re
 import shutil
+import traceback
 from datetime import datetime
 from typing import Any, Dict, List, Union
 
@@ -14,7 +15,9 @@ from pypdf import PdfReader
 # --- PDF Dependency Check ---
 try:
     import camelot
+    CAMELOT_AVAILABLE = True
 except ImportError:
+    CAMELOT_AVAILABLE = False
     print("Warning: Camelot not installed. PDF parsing will fail.")
 
 # --- Configuration Constants ---
@@ -29,11 +32,25 @@ BANK_KEYWORDS: Dict[str, List[str]] = {
     "Evocabank": ["Evocabank", "Evoca"],
     "HSBC Bank Armenia": ["HSBC Armenia", "HSBC Bank"],
     "IDBank": ["IDBank", "ID Bank", "Idram", "Իդրամ"],
-    "InecoBank": ["InecoBank", "Ineco", "InectoBank", "Ինեկո"],
+    "InecoBank": ["InecoBank", "Ineco", "InectoBank", "Ինեկո", "ԻՆԵԿՈԲԱՆԿ", "INECOBANK"],
     "Unibank": ["Unibank", "Uni Bank"],
     "FastBank": ["fastbank", "fast bank", "ՖԱՍԹ ԲԱՆԿ"],
     "AEB": ["AEB", "ArmEconomBank", "ՀԱՅԷԿՈՆՈՄԲԱՆԿ"],
 }
+
+# --- INECO SPECIFIC CONSTANTS ---
+# Markers to identify the table start in both languages
+INECO_TABLE_TITLE_MARKERS = [
+    "ԿԱՏԱՐՎԱԾ ԳՈՐԾԱՐՔՆԵՐԻ/ԳՈՐԾԱՌՆՈՒԹՅՈՒՆՆԵՐԻ ՎԵՐԱԲԵՐՅԱԼ ՄԱՆՐԱՄԱՍՆ ՏԵՂԵԿԱՏՎՈՒԹՅՈՒՆ",
+    "DETAILED INFORMATION ABOUT CONCLUDED TRANSACTIONS/OPERATIONS"
+]
+# Keywords to verify the header row (Armenian + English)
+INECO_CORE_SUBHEADERS = [
+    'Ամսաթիվ', 'Ելք', 'Մուտք', 'Արժույթ',
+    'Date', 'Out', 'In', 'Currency'
+]
+INECO_EXPECTED_COL_COUNT = 8
+# -------------------------------------------
 
 HEADER_KEYWORDS_DATE = ["ամսաթիվ", "date", "օր"]
 HEADER_KEYWORDS_AMOUNT = ["գումար", "amount", "դեբետ", "կրեդիտ", "մուտք", "ելք", "daily balance"]
@@ -131,6 +148,7 @@ def extract_full_content_for_search(filepath: str, file_extension: str) -> Union
     return ""
 
 def find_header_start_index(content: Union[List[str], str], extension: str) -> (int, bool):
+    if extension == '.pdf': return 0, False # PDF logic handled separately
     lines = content if isinstance(content, list) else content.split("\n")
     MULTI_HEADER_PARENTS = [
         "գործարքներ, այլ գործառնություններ", "գործարքի գումար հաշվի արժույթով",
@@ -174,7 +192,7 @@ def flatten_headers(multiindex_cols):
 def validate_statement_owner(content, fn, ln): return True
 
 # ==============================================================================
-#  FALLBACK HELPERS (New Code - Isolated)
+#  FALLBACK HELPERS (Ameriabank)
 # ==============================================================================
 
 def _repair_ameriabank_rows(df: pd.DataFrame) -> pd.DataFrame:
@@ -216,8 +234,9 @@ def _parse_pdf_ameriabank_fallback(content_source) -> pd.DataFrame:
         all_tables = []
         for page_num in range(1, total_pages + 1):
             # Force stream for all pages in fallback
-            tables = camelot.read_pdf(content_source, pages=str(page_num), flavor="stream")
-            all_tables.extend(tables)
+            if CAMELOT_AVAILABLE:
+                tables = camelot.read_pdf(content_source, pages=str(page_num), flavor="stream")
+                all_tables.extend(tables)
 
         dfs = [t.df for t in all_tables if not t.df.empty]
         if not dfs: return pd.DataFrame()
@@ -316,7 +335,6 @@ def parse_transactions(content_source, extension, bank_name, header_index, is_mu
     print(f"   -> Loading transaction data. Identified bank: {bank_name}...")
 
     if extension in (".xls", ".xlsx"):
-        # --- USER'S ORIGINAL EXCEL LOGIC ---
         df = pd.DataFrame()
         if isinstance(content_source, str):
             with open(content_source, "rb") as f:
@@ -354,7 +372,127 @@ def parse_transactions(content_source, extension, bank_name, header_index, is_mu
 
     elif extension == ".pdf":
         try:
-            # --- USER'S ORIGINAL PDF LOGIC (Hybrid) ---
+            # --- INECO BANK RESTORED & ENHANCED LOGIC ---
+            if bank_name == 'InecoBank':
+                print(f"   -> Mode: PDF Parsing for InecoBank using Camelot 'lattice' flavor (2-row header).")
+                try:
+                    tables_camelot = camelot.read_pdf(content_source, pages='all', flavor='lattice', strip_text='\n', line_scale=40, process_background=True)
+                except Exception as e_lattice:
+                    print(f"   [Error] PDF (Ineco): Camelot lattice failed: {e_lattice}. Cannot parse.")
+                    traceback.print_exc()
+                    return pd.DataFrame()
+
+                if not tables_camelot: print("   [Warning] PDF (Ineco): Camelot found no tables."); return pd.DataFrame()
+                all_dfs = [table.df for table in tables_camelot if not table.df.empty]
+                if not all_dfs: print("   [Warning] PDF (Ineco): All tables extracted were empty."); return pd.DataFrame()
+
+                # --- Ineco Header Detection (Multilingual) ---
+                detected_header_df_index = -1; header_row1_index = -1; header_row2_index = -1
+                header_row1_list = []; header_row2_list = []; final_combined_header = []
+
+                # Pre-clean all possible markers (remove spaces/slashes for loose matching)
+                title_markers_clean = [re.sub(r'[\s/]+', '', m) for m in INECO_TABLE_TITLE_MARKERS]
+                header_found_flag = False
+
+                for df_idx, df_table in enumerate(all_dfs):
+                    if header_found_flag: break
+                    if df_table.empty: continue
+
+                    for row_idx, row in df_table.head(15).iterrows():
+                        row_text_combined = ''.join(row.astype(str).str.strip().tolist()); row_text_combined_clean = re.sub(r'[\s/]+', '', row_text_combined)
+
+                        # Check against ALL title markers
+                        if any(marker in row_text_combined_clean for marker in title_markers_clean):
+                            print(f"   -> PDF (Ineco): Found title marker in Table {df_idx}, Row {row_idx}.")
+
+                            # Search next 5 rows for subheaders (flexible spacing)
+                            found_subheader_row = False
+                            for offset in range(1, 6): # Check next 5 rows
+                                check_idx = row_idx + offset
+                                if check_idx >= len(df_table): break
+
+                                row_to_check = df_table.iloc[check_idx]
+                                row_str_lower = ' '.join(row_to_check.astype(str).str.strip().str.lower().tolist())
+
+                                # --- NEW LOGGING ---
+                                found_keywords = [kw for kw in INECO_CORE_SUBHEADERS if kw.lower() in row_str_lower]
+                                print(f"      [Debug] Checking Offset {offset} (Row {check_idx}). Content: {row_str_lower[:50]}...")
+                                print(f"      [Debug] Found Keywords: {found_keywords}")
+                                # -------------------
+
+                                # Relaxed check: Look for at least 3 of the expected keywords (Armenian OR English)
+                                matches = len(found_keywords)
+                                if matches >= 3:
+                                    header_row2_index = check_idx
+                                    header_row1_index = check_idx - 1 # Assume header 1 is directly above
+                                    found_subheader_row = True
+                                    print(f"   -> PDF (Ineco): Found subheaders at Row {check_idx}. Content: {row_str_lower[:50]}...")
+                                    break
+
+                            if found_subheader_row:
+                                header_row1 = df_table.iloc[header_row1_index]
+                                header_row2 = df_table.iloc[header_row2_index]
+
+                                header_row1_list = header_row1.astype(str).str.strip().tolist()
+                                header_row2_list = header_row2.astype(str).str.strip().tolist()
+                                final_combined_header = []
+                                max_len = max(len(header_row1_list), len(header_row2_list))
+                                h1_padded = header_row1_list + [''] * (max_len - len(header_row1_list))
+                                h2_padded = header_row2_list + [''] * (max_len - len(header_row2_list))
+
+                                for h1, h2 in zip(h1_padded, h2_padded):
+                                    h1 = h1.replace('\n', ' ').strip(); h2 = h2.replace('\n', ' ').strip()
+                                    if h1 and h2: final_combined_header.append(f"{h1} {h2}")
+                                    elif h2: final_combined_header.append(h2)
+                                    elif h1: final_combined_header.append(h1)
+                                    else: final_combined_header.append('')
+
+                                final_combined_header = [f'Unknown_{i}' if not h else h for i, h in enumerate(final_combined_header)]
+
+                                if len(final_combined_header) < INECO_EXPECTED_COL_COUNT: final_combined_header.extend([f'Unknown_{i}' for i in range(len(final_combined_header), INECO_EXPECTED_COL_COUNT)])
+                                elif len(final_combined_header) > INECO_EXPECTED_COL_COUNT: final_combined_header = final_combined_header[:INECO_EXPECTED_COL_COUNT]
+
+                                detected_header_df_index = df_idx
+                                print(f"   -> PDF Header (Ineco 2-Row) identified at Table {df_idx}, Rows {header_row1_index}&{header_row2_index}: {final_combined_header}")
+                                header_found_flag = True
+                                break
+                            else: print(f"   [Warning] PDF (Ineco): Could not find subheaders in 5 rows after title marker.")
+                    if header_found_flag: break
+
+                if not final_combined_header:
+                    print("   [Error] PDF (Ineco): Could not find valid 2-row header after title marker. Cannot process.")
+                    return pd.DataFrame()
+
+                # Combine Ineco tables
+                processed_dfs = []; num_header_cols = len(final_combined_header)
+                data_start_row_index = header_row2_index + 1
+
+                for df_idx, df_table in enumerate(all_dfs):
+                    if df_table.empty: continue
+                    if df_table.shape[1] == num_header_cols: df_current = df_table.copy()
+                    elif df_table.shape[1] > num_header_cols: df_current = df_table.iloc[:, :num_header_cols].copy()
+                    else:
+                        df_current = df_table.copy()
+                        [df_current.insert(loc=df_table.shape[1]+i, column=f'Padded_{i}', value=pd.NA) for i in range(num_header_cols - df_table.shape[1])]
+
+                    df_current.columns = final_combined_header; start_row = 0
+
+                    if df_idx == detected_header_df_index: start_row = data_start_row_index
+                    else:
+                        if not df_current.empty:
+                            first_row_text = ''.join(df_current.iloc[0].astype(str).str.strip().tolist()); first_row_cleaned = re.sub(r'[\s/]+', '', first_row_text)
+                            if any(marker in first_row_cleaned for marker in title_markers_clean): start_row = 1
+                            if len(df_current) > start_row and df_current.iloc[start_row].astype(str).str.strip().tolist() == header_row1_list: start_row += 1
+                            if len(df_current) > start_row and df_current.iloc[start_row].astype(str).str.strip().tolist() == header_row2_list: start_row += 1
+                            elif len(df_current) > 0 and df_current.iloc[0].astype(str).str.strip().tolist() == final_combined_header: start_row = 1
+                    df_current = df_current.iloc[start_row:].reset_index(drop=True); processed_dfs.append(df_current)
+
+                if not processed_dfs: print("   [Warning] PDF (Ineco): No data after header processing."); return pd.DataFrame()
+                final_df = pd.concat(processed_dfs, ignore_index=True)
+                return final_df
+            # --- END INECO LOGIC ---
+
+            # --- ORIGINAL PDF LOGIC (Generic + Hybrid + Ameriabank Fallback) ---
             reader = PdfReader(content_source)
             total_pages = len(reader.pages)
             all_extracted_tables = []
@@ -429,7 +567,7 @@ def parse_transactions(content_source, extension, bank_name, header_index, is_mu
 
 
 # ------------------------------------------------------------------------
-# Normalization Logic (Standard + Fallback)
+# Normalization Logic (Standard + Fallback + Ineco Fixes + Positional)
 # ------------------------------------------------------------------------
 def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> pd.DataFrame:
     # --- CHECK FOR FALLBACK DATA ---
@@ -445,7 +583,14 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
         if pd.isna(col) or str(col).strip() == "":
             cleaned_col = "idbank_raw_credit_column"
         elif pd.notna(col):
-            cleaned_col = re.sub(r"[\s\W_]+", "", str(col).lower().replace("\n", ""))
+            # Ineco 2-row header cleaning
+            cleaned_col = str(col).replace('\n', ' ').strip()
+            if ' ' in cleaned_col:
+                 last_part = cleaned_col.split(' ')[-1]
+                 # Look for both Armenian and English keywords at the end of the header
+                 if last_part.lower() in ['ամսաթիվ', 'մուտք', 'ելք', 'արժույթ', 'date', 'credit', 'debit', 'currency', 'in', 'out']:
+                      cleaned_col = last_part
+            cleaned_col = re.sub(r"[\s\W_]+", "", cleaned_col.lower())
         cleaned_df_columns[col] = cleaned_col
     df.rename(columns=cleaned_df_columns, inplace=True)
 
@@ -470,8 +615,8 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
         "currency_col": ["արժույթ", "currency", "քարտիարժույթով", "հաշվիարժույթով", "գործարքներայլգործառնություններարժույթ", "transactionsotheroperationscurrency"],
         "explicit_inflow": ["գործարքիգումարhաշվիարժույթով_մուտք", "գործարքիգումարըքարտիարժույթով_մուտք", "գործարքիգումարքարտիարժույթով_մուտք", "transactionamountintheaccountcurrency_in", "transactionamountintheaccountcurrencyin", "գործարքիգումարըքարտիարժույթովմուտք"],
         "explicit_outflow": ["գործարքիգումարhաշվիարժույթով_ելք", "գործարքիգումարըքարտիարժույթով_ելք", "գործարքիգումարքարտիարժույթով_ելք", "transactionamountintheaccountcurrency_out", "transactionamountintheaccountcurrencyout", "գործարքիգումարըքարտիարժույթովելք"],
-        "credit": ["մուտքamd", "մուտք", "credit", "inflow", "կրեդիտ", "idbank_raw_credit_column", "income"],
-        "debit": ["ելքamd", "ելք", "debit", "outflow", "դեբետ", "expense"],
+        "credit": ["մուտքamd", "մուտք", "credit", "inflow", "կրեդիտ", "idbank_raw_credit_column", "income", "in"],
+        "debit": ["ելքamd", "ելք", "debit", "outflow", "դեբետ", "expense", "out"],
         "single_amount_sign": ["գործարքիգումարքարտիարժույթով", "գործարքիգումարհաշվիարժույթով", "amount", "գործարքիգումարը"],
         "sender": ["շահառուվճարող", "շահառու", "վճարող", "sendername", "թղթակից", "receiverpayer"],
         "sender_account": ["շահառույիվճարողիհաշիվ", "հաշիվ", "accountnumber", "receiverpayeraccount"],
@@ -486,7 +631,7 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
             for c in df.columns:
                 if k in c: return c
         return None
-    def create_placeholder(value="N/A"): return pd.Series([value] * len(df), index=df.index).astype(str)
+    def create_placeholder(value="N/A", index=df.index): return pd.Series([value] * len(index), index=index).astype(str)
     def clean_amount_series(s, b, c=""):
         if s is None: return pd.Series(0, index=df.index)
         if isinstance(s, pd.DataFrame): s = pd.Series(s.iloc[:, 0].values, index=df.index).astype(str)
@@ -508,12 +653,34 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
     if "original_excel_row" in df.columns: universal_df["excel_row_number"] = df["original_excel_row"]
     else: universal_df["excel_row_number"] = pd.NA
 
-    # Date
+    # --- POSITION-BASED FALLBACK FOR INECO (New Logic) ---
     t_date = find_column(column_maps["transaction_date"])
-    p_date = find_column(column_maps["provision_date"])
+    cred = find_column_by_substring(column_maps["credit"])
+
+    # If we are in InecoBank and couldn't find Date or Credit columns by name,
+    # assume the standard 8-column layout (Date, ..., Debit, Credit, Currency, ..., Description)
+    use_positional = False
+    if bank_name == 'InecoBank' and (not t_date or not cred):
+        print("   [Info] InecoBank: Named columns not found. Attempting positional fallback.")
+        if len(df.columns) >= 8:
+            use_positional = True
+            # Mapping based on standard Ineco PDF layout:
+            # Col 0: Date
+            # Col 3: Currency
+            # Col 4: Credit (In)
+            # Col 5: Debit (Out)
+            # Col 7: Description (often split, but let's take 7)
+            col_date_idx = df.columns[0]
+            col_curr_idx = df.columns[3]
+            col_credit_idx = df.columns[4]
+            col_debit_idx = df.columns[5]
+            col_desc_idx = df.columns[7]
+        else:
+            print(f"   [Warning] InecoBank: Positional fallback failed. Not enough columns ({len(df.columns)} < 8).")
 
     DATE_FORMATS = ["%Y-%m-%d %H:%M:%S", "%d.%m.%Y", "%d.%m.%Y %H:%M:%S", "%m/%d/%Y", "%m/%d/%Y %H:%M:%S", "%Y.%m.%d", "%d/%m/%Y", "%d/%m/%Y %H:%M"]
     def robust_date_parser(col):
+        if col is None or col.empty: return pd.Series([pd.NaT] * len(df.index), index=df.index)
         s = col.astype(str).str.strip()
         s = s.str.replace(r"([/\.])00(\d{2})\b", r"\g<1>20\g<2>", regex=True)
         parsed = pd.Series(pd.NaT, index=s.index, dtype="datetime64[ns]")
@@ -535,80 +702,116 @@ def normalize_transactions(df: pd.DataFrame, bank_name: str, filename: str) -> p
              parsed.loc[parsed.isna()] = parsed.loc[parsed.isna()].fillna(final)
         return parsed
 
-    if t_date: universal_df["Transaction_Date"] = robust_date_parser(df[t_date])
-    if p_date: universal_df["Provision_Date"] = robust_date_parser(df[p_date])
-    if t_date and not p_date: universal_df["Provision_Date"] = universal_df["Transaction_Date"]
-    elif p_date and not t_date: universal_df["Transaction_Date"] = universal_df["Provision_Date"]
+    # --- APPLY DATE ---
+    if use_positional:
+        universal_df["Transaction_Date"] = robust_date_parser(df[col_date_idx])
+    elif t_date:
+        universal_df["Transaction_Date"] = robust_date_parser(df[t_date])
+
+    # Try to find provision date
+    p_date = find_column(column_maps["provision_date"])
+    if p_date:
+        universal_df["Provision_Date"] = robust_date_parser(df[p_date])
+
+    # Fill Provision_Date if it is completely empty
+    if universal_df["Provision_Date"].isna().all() and not universal_df["Transaction_Date"].isna().all():
+        universal_df["Provision_Date"] = universal_df["Transaction_Date"]
 
     # Balance filter
     desc_cols = []
     for k in column_maps["description"]: desc_cols.extend([c for c in df.columns if k in c])
-    desc_cols = sorted(list(set(desc_cols)), key=desc_cols.index)
+    desc_cols = sorted(list(set(desc_cols)), key=lambda x: df.columns.tolist().index(x))
     if desc_cols:
         temp_desc = df[desc_cols].astype(str).fillna('').apply(lambda r: ' '.join(r.values).strip(), axis=1).str.lower()
         mask = temp_desc.str.contains("մնացորդ", na=False)
         df = df[~mask].copy()
         universal_df = universal_df[~mask].copy()
 
-    # Amount
+    # --- APPLY AMOUNT ---
     in_s = pd.Series(0.0, index=df.index)
     out_s = pd.Series(0.0, index=df.index)
-    exp_in = find_column(column_maps["explicit_inflow"]) or find_column_by_substring(column_maps["explicit_inflow"])
-    exp_out = find_column(column_maps["explicit_outflow"]) or find_column_by_substring(column_maps["explicit_outflow"])
-    cred = find_column_by_substring(column_maps["credit"])
-    debt = find_column_by_substring(column_maps["debit"])
-    sing = find_column_by_substring(column_maps["single_amount_sign"])
 
-    if exp_in or exp_out:
-        in_s = clean_amount_series(df.get(exp_in), bank_name, exp_in)
-        raw_out = clean_amount_series(df.get(exp_out), bank_name, exp_out)
-        out_s = raw_out.abs()
-    elif cred or debt:
-        in_s = clean_amount_series(df.get(cred), bank_name, cred)
-        raw_out = clean_amount_series(df.get(debt), bank_name, debt)
-        out_s = raw_out.abs()
-    elif sing:
-        amts = clean_amount_series(df.get(sing), bank_name, sing)
-        in_s = amts.apply(lambda x: x if x > 0 else 0.0)
-        out_s = amts.apply(lambda x: abs(x) if x < 0 else 0.0)
+    if use_positional:
+        in_s = clean_amount_series(df[col_credit_idx], bank_name)
+        out_s = clean_amount_series(df[col_debit_idx], bank_name).abs()
+    else:
+        exp_in = find_column(column_maps["explicit_inflow"]) or find_column_by_substring(column_maps["explicit_inflow"])
+        exp_out = find_column(column_maps["explicit_outflow"]) or find_column_by_substring(column_maps["explicit_outflow"])
+        cred = find_column_by_substring(column_maps["credit"])
+        debt = find_column_by_substring(column_maps["debit"])
+        sing = find_column_by_substring(column_maps["single_amount_sign"])
+
+        if exp_in or exp_out:
+            in_s = clean_amount_series(df.get(exp_in), bank_name, exp_in)
+            raw_out = clean_amount_series(df.get(exp_out), bank_name, exp_out)
+            out_s = raw_out.abs()
+        elif cred or debt:
+            in_s = clean_amount_series(df.get(cred), bank_name, cred)
+            raw_out = clean_amount_series(df.get(debt), bank_name, debt)
+            out_s = raw_out.abs()
+        elif sing:
+            amts = clean_amount_series(df.get(sing), bank_name, sing)
+            in_s = amts.apply(lambda x: x if x > 0 else 0.0)
+            out_s = amts.apply(lambda x: abs(x) if x < 0 else 0.0)
 
     universal_df["is_expense"] = out_s > 0
     universal_df["Amount"] = in_s.mask(universal_df["is_expense"], out_s)
 
     # Filtering
     universal_df = universal_df[universal_df["Amount"] > 0].copy()
+    filtered_index = universal_df.index
 
-    # Currency
-    cur_col = find_column(column_maps["currency_col"])
+    # --- APPLY CURRENCY ---
     curr = "AMD"
-    if cur_col:
-        v = df[cur_col].dropna()
-        if not v.empty: curr = str(v.iloc[0]).upper()
-    elif cred and "amd" in cred: curr = "AMD"
-    elif cred and "usd" in cred: curr = "USD"
-    universal_df["Currency"] = curr
+    if use_positional:
+        v = df.loc[filtered_index, col_curr_idx].astype(str).str.strip().str.upper()
+        valid = v.str.match(r'^[A-Z]{3}$')
+        universal_df["Currency"] = v.where(valid, "AMD")
+    else:
+        cur_col = find_column(column_maps["currency_col"])
+        if cur_col:
+            v = df.loc[filtered_index, cur_col].astype(str).str.strip().str.upper()
+            valid = v.str.match(r'^[A-Z]{3}$')
+            universal_df["Currency"] = v.where(valid, "AMD")
+        elif cred and "amd" in cred: universal_df["Currency"] = "AMD"
+        elif cred and "usd" in cred: universal_df["Currency"] = "USD"
+        else: universal_df["Currency"] = "AMD"
 
-    # Desc/Sender
-    if desc_cols:
-        if len(desc_cols) == 1:
-            universal_df["Description"] = df.loc[universal_df.index, desc_cols[0]].astype(str).fillna("").str.replace("_x000D_", " ").str.replace(r"\s{2,}", " ", regex=True)
-        else:
-            universal_df["Description"] = df.loc[universal_df.index, desc_cols].astype(str).fillna("").apply(lambda r: " ".join(r.values).strip(), axis=1).str.replace("_x000D_", " ").str.replace(r"\s{2,}", " ", regex=True)
-    else: universal_df["Description"] = create_placeholder()
+    # --- APPLY DESC/SENDER ---
+    if use_positional:
+        universal_df['Description'] = df.loc[filtered_index, col_desc_idx].astype(str).str.strip().str.replace('_x000D_', ' ').str.replace(r'\s{2,}', ' ', regex=True)
+    elif desc_cols:
+        description_data = df.loc[filtered_index, desc_cols].astype(str).copy()
+        description_data.replace('nan', '', inplace=True)
+        universal_df['Description'] = description_data.apply(lambda row: ' '.join(row.values).strip(), axis=1).str.replace('_x000D_', ' ', regex=False).str.replace(r'\s{2,}', ' ', regex=True)
+    else: universal_df["Description"] = create_placeholder(index=filtered_index)
 
     snd = find_column(column_maps["sender"])
-    universal_df["Sender"] = df[snd].astype(str) if snd else create_placeholder()
+    universal_df["Sender"] = df.loc[filtered_index, snd].astype(str).fillna('N/A') if snd else create_placeholder(index=filtered_index)
     acc = find_column(column_maps["sender_account"])
-    universal_df["Sender account number"] = df[acc].astype(str) if acc else create_placeholder()
+    universal_df["Sender account number"] = df.loc[filtered_index, acc].astype(str).fillna('N/A') if acc else create_placeholder(index=filtered_index)
+
+    # --- INECO SPECIFIC SENDER PARSING ---
+    if bank_name == 'InecoBank' and 'Description' in universal_df.columns and not universal_df['Description'].empty:
+         sender_pattern = re.compile(r'\{([^{}\(\)]+?)\s*\((\d[\d\s\-]*\d|\d+)\)\}')
+         parsed_data = universal_df['Description'].str.extract(sender_pattern).reindex(filtered_index)
+         if not parsed_data.empty:
+             if 0 in parsed_data.columns:
+                 mask_sender = (universal_df['Sender'] == 'N/A') & parsed_data[0].notna()
+                 universal_df.loc[mask_sender, 'Sender'] = parsed_data.loc[mask_sender, 0]
+             if 1 in parsed_data.columns:
+                 mask_account = (universal_df['Sender account number'] == 'N/A') & parsed_data[1].notna()
+                 universal_df.loc[mask_account, 'Sender account number'] = parsed_data.loc[mask_account, 1]
+    # ------------------------------------------------
+
     plc = [c for k in column_maps["transaction_place"] for c in df.columns if k in c]
     if plc:
-        universal_df["Transaction_Place"] = df.loc[universal_df.index, plc].astype(str).fillna("").apply(lambda r: " ".join(r.values).strip(), axis=1).str.replace(r"\s{2,}", " ", regex=True)
-    else: universal_df["Transaction_Place"] = create_placeholder()
+        universal_df["Transaction_Place"] = df.loc[filtered_index, plc].astype(str).fillna("").apply(lambda r: " ".join(r.values).strip(), axis=1).str.replace(r"\s{2,}", " ", regex=True)
+    else: universal_df["Transaction_Place"] = create_placeholder(index=filtered_index)
 
     final_df = universal_df.dropna(subset=["Transaction_Date", "Amount"]).copy()
 
     # Fallback Trigger (Normalization)
-    # If original logic failed (0 rows) BUT we have raw data, and it's Ameriabank
     if final_df.empty and not df.empty and bank_name == "Ameriabank":
         print("   [Info] Standard Normalization returned 0 rows. Trying Fallback.")
         return _normalize_ameriabank_fallback(df, filename)
