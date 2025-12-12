@@ -75,7 +75,7 @@
 
     {% if is_admin %}
     <p style="background-color: #f0f8ff; padding: 10px; border-left: 4px solid #007bff; margin-bottom: 25px;">
-        Դուք մուտք եք գործել որպես <strong>SUPERADMIN</strong>։ Դուք տեսնում եք բոլոր Հայտարարագրերը և ունեք կառավարման գործիքներ։
+        Դուք մուտք եք գործել որպես <strong>{{ user.profile.role }}</strong>։ Դուք ունեք բոլոր կառավարման գործիքներ։
     </p>
     {% endif %}
 
