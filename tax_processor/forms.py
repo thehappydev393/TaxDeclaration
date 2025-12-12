@@ -2,10 +2,11 @@
 
 from django import forms
 from django.forms import formset_factory
+from django.contrib.auth.models import User
 from datetime import date
 from .models import (
     Declaration, TaxRule, DeclarationPoint, UnmatchedTransaction,
-    EntityTypeRule, TransactionScopeRule, Transaction
+    EntityTypeRule, TransactionScopeRule, Transaction, UserProfile
 )
 
 # --- NEW: Export Model Choices ---
@@ -198,3 +199,16 @@ class TransactionEditForm(forms.Form):
         label="Վերադարձնել «Սպասում է Վերանայման» կարգավիճակին",
         help_text="Նշեք այս վանդակը՝ գործարքը վերանայման հերթ վերադարձնելու համար (կջնջի ընթացիկ նշանակումը)։"
     )
+
+class ShareDeclarationForm(forms.ModelForm):
+    # Only show users who are ADMINs
+    shared_with = forms.ModelMultipleChoiceField(
+        queryset=User.objects.filter(profile__role='ADMIN'),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Ընտրեք Ադմինիստրատորներին (Share with Admins)"
+    )
+
+    class Meta:
+        model = Declaration
+        fields = ['shared_with']

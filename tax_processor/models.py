@@ -10,6 +10,7 @@ from django.db.models import F
 class UserProfile(models.Model):
     ROLE_CHOICES = (
         ('SUPERADMIN', 'Superadmin'),
+        ('ADMIN', 'Admin'), # <--- NEW ROLE
         ('REGULAR_USER', 'Regular User'),
     )
     user = models.OneToOneField(
@@ -25,6 +26,7 @@ class UserProfile(models.Model):
         verbose_name="User Role"
     )
     def is_superadmin(self): return self.role == 'SUPERADMIN'
+    def is_admin(self): return self.role == 'ADMIN' # <--- NEW HELPER
     def __str__(self): return f"{self.user.username} - {self.role}"
     class Meta:
         verbose_name = "User Profile"
@@ -41,6 +43,13 @@ class Declaration(models.Model):
         related_name='created_declarations',
         verbose_name="Created By"
     )
+    shared_with = models.ManyToManyField(
+        User,
+        related_name='shared_declarations',
+        blank=True,
+        verbose_name="Shared With (Admins)"
+    )
+
     STATUS_CHOICES = (
         ('DRAFT', 'Draft'),
         ('ANALYSIS_COMPLETE', 'Analysis Complete'),

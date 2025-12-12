@@ -10,6 +10,7 @@ from django.utils import timezone
 from .forms import (
     StatementUploadForm, TaxRuleForm, ResolutionForm, BaseConditionFormSet,
     AddStatementsForm, TransactionEditForm, EntityTypeRuleForm, TransactionScopeRuleForm,
+    ShareDeclarationForm,
     ENTITY_CHOICES, SCOPE_CHOICES
 )
 from .services import import_statement_service
@@ -39,10 +40,14 @@ BANK_NAMES_LIST = sorted(list(BANK_KEYWORDS.keys()))
 # 1. PERMISSION HELPERS
 # -----------------------------------------------------------
 def is_superadmin(user):
-    return user.is_authenticated and hasattr(user, 'profile') and user.profile.role == 'SUPERADMIN'
+    """
+    Checks if user is either SUPERADMIN or ADMIN.
+    This grants access to management pages.
+    """
+    return user.is_authenticated and hasattr(user, 'profile') and user.profile.role in ['SUPERADMIN', 'ADMIN']
 
 def is_permitted_user(user):
-    return user.is_authenticated and hasattr(user, 'profile') and user.profile.role in ['SUPERADMIN', 'REGULAR_USER']
+    return user.is_authenticated and hasattr(user, 'profile') and user.profile.role in ['SUPERADMIN', 'ADMIN', 'REGULAR_USER']
 
 # --- Status Helper Function ---
 def _update_declaration_status(declaration_id):
@@ -170,8 +175,23 @@ def add_statements_to_declaration(request, declaration_id):
 
 
 def filter_declarations_by_user(user):
-    if is_superadmin(user): return Declaration.objects.all()
-    else: return Declaration.objects.filter(created_by=user)
+    """
+    Core visibility logic:
+    - SUPERADMIN: Sees everything.
+    - ADMIN: Sees own declarations AND declarations shared with them.
+    - REGULAR_USER: Sees only own declarations.
+    """
+    if not hasattr(user, 'profile'):
+        return Declaration.objects.none()
+
+    if user.profile.role == 'SUPERADMIN':
+        return Declaration.objects.all()
+    elif user.profile.role == 'ADMIN':
+        return Declaration.objects.filter(
+            Q(created_by=user) | Q(shared_with=user)
+        ).distinct()
+    else:
+        return Declaration.objects.filter(created_by=user)
 
 @user_passes_test(is_permitted_user)
 def declaration_detail(request, declaration_id):
@@ -297,6 +317,26 @@ def mark_declaration_filed(request, declaration_id):
 
     return redirect('declaration_detail', declaration_id=declaration.pk)
 
+@user_passes_test(is_permitted_user)
+def share_declaration(request, declaration_id):
+    # Only the OWNER can share a declaration
+    declaration = get_object_or_404(Declaration, pk=declaration_id, created_by=request.user)
+
+    if request.method == 'POST':
+        form = ShareDeclarationForm(request.POST, instance=declaration)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Declaration '{declaration.name}' sharing settings updated.")
+            return redirect('declaration_detail', declaration_id=declaration.pk)
+    else:
+        form = ShareDeclarationForm(instance=declaration)
+
+    context = {
+        'form': form,
+        'declaration': declaration,
+        'is_admin': is_superadmin(request.user)
+    }
+    return render(request, 'tax_processor/share_declaration.html', context)
 
 # -----------------------------------------------------------
 # 3. GLOBAL (CATEGORY) RULE MANAGEMENT
@@ -766,16 +806,27 @@ def review_queue(request, declaration_id=None):
     current_declaration = None
     hints = []
     if declaration_id:
-        current_declaration = get_object_or_404(Declaration, pk=declaration_id)
-        if not (is_superadmin(user) or current_declaration.created_by == user):
-            messages.error(request, "Permission denied."); return redirect('user_dashboard')
+        # Specific declaration - enforce visibility
+        visible_decls = filter_declarations_by_user(user)
+        current_declaration = get_object_or_404(visible_decls, pk=declaration_id)
+
         queryset = queryset.filter(transaction__statement__declaration_id=declaration_id)
         title = f"Review Queue - {current_declaration.name}"
         is_filtered_by_declaration = True
         hints = AnalysisHint.objects.filter(declaration=current_declaration, is_resolved=False)
-    elif is_superadmin(user):
+
+    elif user.profile.role == 'SUPERADMIN':
         title = "SUPERADMIN Review Queue (All Pending)"
+        # Superadmin sees everything by default
+
+    elif user.profile.role == 'ADMIN':
+        title = "ADMIN Review Queue (All Visible)"
+        # Admin sees pending items for *their* visible declarations
+        visible_decls = filter_declarations_by_user(user)
+        queryset = queryset.filter(transaction__statement__declaration__in=visible_decls)
+
     else:
+        # Regular user only sees assigned items (or could fallback to their decls)
         queryset = queryset.filter(assigned_user=user)
         title = f"{user.username}'s Pending Reviews"
 

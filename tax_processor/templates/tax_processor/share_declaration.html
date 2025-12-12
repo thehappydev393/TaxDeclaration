@@ -1,0 +1,47 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <title>Կիսվել Հայտարարագրով - {{ declaration.name }}</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 30px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        h1 { color: #007bff; font-size: 2em; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 10px; }
+
+        /* Checkbox list styling */
+        ul { list-style-type: none; padding: 0; }
+        li { padding: 8px; border-bottom: 1px solid #eee; }
+        li:last-child { border-bottom: none; }
+        input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); }
+
+        .btn-save { padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; }
+        .btn-save:hover { background-color: #218838; }
+        .cancel-link { margin-left: 15px; color: #6c757d; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    {% include "tax_processor/base_navigation.html" %}
+
+    <h1>Կիսվել Հայտարարագրով</h1>
+    <h2>{{ declaration.name }}</h2>
+    <p>Ընտրեք այն Ադմինիստրատորներին, ովքեր պետք է մուտք ունենան այս հայտարարագրին:</p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            {{ form.shared_with.errors }}
+            <label for="{{ form.shared_with.id_for_label }}">Ադմինիստրատորներ:</label>
+            {{ form.shared_with }}
+        </div>
+
+        <button type="submit" class="btn-save">Պահպանել</button>
+        <a href="{% url 'declaration_detail' declaration.id %}" class="cancel-link">Չեղարկել</a>
+    </form>
+</div>
+</body>
+</html>

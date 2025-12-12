@@ -132,6 +132,11 @@
             <a href="{% url 'add_statements' declaration_id=declaration.pk %}" class="btn btn-secondary">
                 + Ավելացնել Քաղվածքներ {# Add Statements #}
             </a>
+            {% if request.user == declaration.created_by %}
+            <a href="{% url 'share_declaration' declaration.pk %}" class="btn btn-secondary" style="background-color: #17a2b8;">
+                Կիսվել Ադմինի հետ (Share)
+            </a>
+            {% endif %}
             <a href="{% url 'all_transactions_list' declaration_id=declaration.pk %}" class="btn btn-secondary">
                 Դիտել Բոլոր Գործարքները {# View All Transactions #}
             </a>
