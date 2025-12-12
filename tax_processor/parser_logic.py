@@ -39,17 +39,15 @@ BANK_KEYWORDS: Dict[str, List[str]] = {
 }
 
 # --- INECO SPECIFIC CONSTANTS ---
-# Markers to identify the table start in both languages
 INECO_TABLE_TITLE_MARKERS = [
     "ԿԱՏԱՐՎԱԾ ԳՈՐԾԱՐՔՆԵՐԻ/ԳՈՐԾԱՌՆՈՒԹՅՈՒՆՆԵՐԻ ՎԵՐԱԲԵՐՅԱԼ ՄԱՆՐԱՄԱՍՆ ՏԵՂԵԿԱՏՎՈՒԹՅՈՒՆ",
     "DETAILED INFORMATION ABOUT CONCLUDED TRANSACTIONS/OPERATIONS"
 ]
-# Keywords to verify the header row (Armenian + English)
 INECO_CORE_SUBHEADERS = [
     'Ամսաթիվ', 'Ելք', 'Մուտք', 'Արժույթ',
     'Date', 'Out', 'In', 'Currency'
 ]
-INECO_EXPECTED_COL_COUNT = 8
+INECO_EXPECTED_COL_COUNT = 9
 # -------------------------------------------
 
 HEADER_KEYWORDS_DATE = ["ամսաթիվ", "date", "օր"]
@@ -376,7 +374,8 @@ def parse_transactions(content_source, extension, bank_name, header_index, is_mu
             if bank_name == 'InecoBank':
                 print(f"   -> Mode: PDF Parsing for InecoBank using Camelot 'lattice' flavor (2-row header).")
                 try:
-                    tables_camelot = camelot.read_pdf(content_source, pages='all', flavor='lattice', strip_text='\n', line_scale=40, process_background=True)
+                    # --- PERFORMANCE OPTIMIZATION: REMOVED process_background=True ---
+                    tables_camelot = camelot.read_pdf(content_source, pages='all', flavor='lattice', strip_text='\n', line_scale=40)
                 except Exception as e_lattice:
                     print(f"   [Error] PDF (Ineco): Camelot lattice failed: {e_lattice}. Cannot parse.")
                     traceback.print_exc()
