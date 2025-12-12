@@ -197,6 +197,7 @@ def filter_declarations_by_user(user):
 def declaration_detail(request, declaration_id):
     declaration_qs = filter_declarations_by_user(request.user)
     declaration = get_object_or_404(declaration_qs, pk=declaration_id)
+    statements = declaration.statements.all().order_by('-upload_date')
     total_statements = declaration.statements.count()
     total_transactions = Transaction.objects.filter(statement__declaration=declaration).count()
 
@@ -208,6 +209,7 @@ def declaration_detail(request, declaration_id):
 
     context = {
         'declaration': declaration,
+        'statements': statements,
         'total_statements': total_statements,
         'total_transactions': total_transactions,
         'unassigned_transactions': unassigned_transactions,

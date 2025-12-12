@@ -64,6 +64,11 @@
         .info-unassigned { font-weight: 600; color: #dc3545; margin-bottom: 10px;}
         .footer-nav { margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 0.9em; }
         .footer-nav a { color: #007bff; text-decoration: none; }
+
+        .statements-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.95em; }
+        .statements-table th { background-color: #e9ecef; color: #495057; font-weight: 600; text-align: left; padding: 10px; border-bottom: 2px solid #dee2e6; }
+        .statements-table td { padding: 10px; border-bottom: 1px solid #eee; color: #555; }
+        .statements-table tr:last-child td { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -86,6 +91,29 @@
     <p><strong>Հաճախորդ։</strong> {{ declaration.client_reference }} ({{ declaration.first_name }} {{ declaration.last_name }})</p>
     <p><strong>Կարգավիճակ։</strong> {{ declaration.get_status_display }}</p>
 
+    <h2>Ներբեռնված Քաղվածքներ (Uploaded Statements)</h2>
+    {% if statements %}
+    <table class="statements-table">
+        <thead>
+        <tr>
+            <th>Ֆայլի Անուն</th>
+            <th>Բանկ</th>
+            <th>Ներբեռնման Ամսաթիվ</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for stmt in statements %}
+        <tr>
+            <td>{{ stmt.file_name }}</td>
+            <td>{{ stmt.bank_name }}</td>
+            <td>{{ stmt.upload_date|date:"Y-m-d H:i" }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #6c757d; font-style: italic;">Այս հայտարարագրի համար դեռևս քաղվածքներ ներբեռնված չեն։</p>
+    {% endif %}
 
     <h2>Վերլուծության Ամփոփում</h2>
     <div class="summary-box">
